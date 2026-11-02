@@ -1,0 +1,36 @@
+// Ứng dụng pane: exclusion list + Chromium compatibility list.
+
+import { AppListSection, Pane } from "../widgets.slint";
+
+export component AppsPane inherits Pane {
+    title: "Ứng dụng";
+    subtitle: "Quản lý app loại trừ và tương thích gõ";
+
+    in property <[string]> excluded-apps;
+    in property <[string]> chromium-apps;
+
+    callback add-excluded(string);
+    callback remove-excluded(string);
+    callback reset-excluded();
+    callback add-chromium(string);
+    callback remove-chromium(string);
+    callback reset-chromium();
+
+    AppListSection {
+        title: "ỨNG DỤNG LOẠI TRỪ";
+        desc: "Tắt UVie for Windows cho các ứng dụng trong danh sách";
+        items: root.excluded-apps;
+        add(exe) => root.add-excluded(exe);
+        remove(exe) => root.remove-excluded(exe);
+        reset => root.reset-excluded();
+    }
+
+    AppListSection {
+        title: "CHROMIUM / TRÌNH DUYỆT";
+        desc: "Nếu gõ trong trình duyệt Chromium bị lỗi (mất ký tự, nhân đôi), thêm app vào danh sách này — UVie sẽ chọn-và-gõ-đè thay vì xoá lùi";
+        items: root.chromium-apps;
+        add(exe) => root.add-chromium(exe);
+        remove(exe) => root.remove-chromium(exe);
+        reset => root.reset-chromium();
+    }
+}

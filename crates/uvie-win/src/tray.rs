@@ -19,8 +19,8 @@ use windows::Win32::UI::WindowsAndMessaging::{
     AppendMenuW, CreatePopupMenu, CreateWindowExW, DefWindowProcW, DestroyMenu, DestroyWindow,
     GetCursorPos, LoadIconW, PostQuitMessage, RegisterClassExW, SetForegroundWindow,
     TrackPopupMenu, CW_USEDEFAULT, HICON, IDI_APPLICATION, MF_SEPARATOR, MF_STRING,
-    TPM_BOTTOMALIGN, TPM_LEFTALIGN, WM_COMMAND, WM_DESTROY, WM_HOTKEY, WM_RBUTTONUP, WM_USER,
-    WNDCLASSEXW, WS_EX_NOACTIVATE,
+    TPM_BOTTOMALIGN, TPM_LEFTALIGN, WM_COMMAND, WM_DESTROY, WM_HOTKEY, WM_LBUTTONDBLCLK,
+    WM_RBUTTONUP, WM_USER, WNDCLASSEXW, WS_EX_NOACTIVATE,
 };
 
 /// App icon resource id (app.rc: `IDI_APP_ICON ICON "assets/uvie.ico"`).
@@ -157,8 +157,17 @@ unsafe extern "system" fn wnd_proc(
 ) -> LRESULT {
     match msg {
         WM_TRAYICON => {
-            if lparam.0 as u32 == WM_RBUTTONUP {
-                show_menu(hwnd);
+            match lparam.0 as u32 {
+                WM_RBUTTONUP => show_menu(hwnd),
+                // Double-click opens the settings window.
+                WM_LBUTTONDBLCLK => MENU_HANDLER.with(|h| {
+                    if let Ok(mut g) = h.try_borrow_mut() {
+                        if let Some(f) = g.as_mut() {
+                            f(CMD_OPEN_SETTINGS);
+                        }
+                    }
+                }),
+                _ => {}
             }
             LRESULT(0)
         }

@@ -1,0 +1,119 @@
+// Tổng quan pane: master toggle, input method, appearance (style + light/
+// dark), smart switching, language detection, system, hotkey.
+
+import { Card, ComboRow, IconChip, InfoRow, Pane, Section, ToggleRow, UIGlyph, UITheme } from "../widgets.slint";
+import { Palette, Switch } from "std-widgets.slint";
+
+export component GeneralPane inherits Pane {
+    title: "Tổng quan";
+    subtitle: "Kiểm soát cách UVie gõ Tiếng Việt trong mọi ứng dụng";
+
+    in-out property <bool> ime-enabled;
+    in-out property <int> input-method-index; // 0 Telex, 1 VNI, 2 SimpleTelex
+    in-out property <int> scheme-index;      // 0 System, 1 Light, 2 Dark
+    in-out property <bool> per-app-language;
+    in-out property <bool> english-override;
+    in-out property <bool> launch-at-login;
+
+    callback save-settings();
+
+    // Master toggle card.
+    Card {
+        HorizontalLayout {
+            padding: 16px;
+            spacing: 14px;
+            IconChip {
+                glyph: UIGlyph.keyboard;
+                width: 36px;
+                height: 36px;
+                chip-bg: Palette.accent-background;
+                icon-fg: Palette.accent-foreground;
+            }
+            VerticalLayout {
+                spacing: 3px;
+                alignment: center;
+                Text {
+                    text: "Tiếng Việt (UVie)";
+                    font-size: 15px;
+                    font-weight: 600;
+                    color: Palette.foreground;
+                }
+                Text {
+                    text: "Bộ gõ Tiếng Việt cho Windows";
+                    font-size: 12px;
+                    color: UITheme.secondary;
+                }
+            }
+            Switch {
+                checked <=> root.ime-enabled;
+                toggled => root.save-settings();
+            }
+        }
+    }
+
+    Section {
+        title: "BẢNG MÃ GÕ";
+        ComboRow {
+            glyph: UIGlyph.keyboard;
+            title: "Kiểu gõ";
+            desc: "Chọn Telex, VNI hoặc Simple Telex";
+            options: ["Telex", "VNI", "Simple Telex"];
+            index <=> root.input-method-index;
+            selected => root.save-settings();
+        }
+    }
+
+    Section {
+        title: "GIAO DIỆN";
+        ComboRow {
+            glyph: UIGlyph.sun;
+            title: "Chế độ sáng / tối";
+            desc: "Áp dụng ngay, không cần khởi động lại";
+            options: ["Theo hệ thống", "Sáng", "Tối"];
+            index <=> root.scheme-index;
+            selected => root.save-settings();
+        }
+    }
+
+    Section {
+        title: "THÔNG MINH";
+        ToggleRow {
+            glyph: UIGlyph.switch;
+            title: "Nhớ ngôn ngữ từng ứng dụng";
+            desc: "Tự động Tiếng Việt / English khi chuyển app";
+            checked <=> root.per-app-language;
+            toggled => root.save-settings();
+        }
+    }
+
+    Section {
+        title: "PHÁT HIỆN NGÔN NGỮ";
+        ToggleRow {
+            glyph: UIGlyph.search;
+            title: "Bỏ qua khi gõ tiếng Anh";
+            desc: "Từ tiếng Anh thật sẽ không bị sửa thành tiếng Việt";
+            checked <=> root.english-override;
+            toggled => root.save-settings();
+        }
+    }
+
+    Section {
+        title: "HỆ THỐNG";
+        ToggleRow {
+            glyph: UIGlyph.power;
+            title: "Khởi động cùng Windows";
+            desc: "Tự động chạy khi đăng nhập";
+            checked <=> root.launch-at-login;
+            toggled => root.save-settings();
+        }
+    }
+
+    Section {
+        title: "PHÍM TẮT CHUYỂN NGÔN NGỮ";
+        InfoRow {
+            glyph: UIGlyph.keyboard;
+            title: "Ctrl + Shift + Z";
+            desc: "Bật / tắt Tiếng Việt từ bất kỳ ứng dụng nào";
+        }
+    }
+}

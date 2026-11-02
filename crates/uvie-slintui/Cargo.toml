@@ -1,0 +1,25 @@
+[package]
+name = "uvie-slintui"
+version = "1.1.0"
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "Slint settings UI for UVie — fast-building alternative to the WinUI 3 settings window"
+build = "build.rs"
+
+[dependencies]
+slint.workspace = true
+uvie-core.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+# ShellExecuteW for the About pane's web links.
+windows = { workspace = true, features = [
+    "Win32_Foundation",
+    "Win32_UI_HiDpi",
+    "Win32_UI_Shell",
+    "Win32_UI_WindowsAndMessaging",
+] }
+
+[build-dependencies]
+slint-build.workspace = true

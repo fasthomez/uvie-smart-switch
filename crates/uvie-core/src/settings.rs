@@ -14,6 +14,17 @@ pub enum LanguagePref {
     English,
 }
 
+/// Light/dark preference for the settings window — applied live via the
+/// widget palette.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum UiMode {
+    #[default]
+    System,
+    Light,
+    Dark,
+}
+
 /// Global keyboard shortcut binding (e.g. the Vi/En toggle).
 /// Serialized as e.g. `"Ctrl+Shift+V"`; parsing lives in the host crate
 /// where VK codes are available.
@@ -73,6 +84,8 @@ pub struct Settings {
     pub macro_enabled: bool,
     /// Vi/En toggle hotkey.
     pub hotkey: Hotkey,
+    /// Settings-window light/dark mode.
+    pub mode: UiMode,
 }
 
 /// Chromium browsers (Windows exe names) that get the select-and-overwrite
@@ -111,6 +124,7 @@ impl Default for Settings {
                 .collect(),
             macro_enabled: false,
             hotkey: Hotkey::default(),
+            mode: UiMode::default(),
         }
     }
 }
@@ -160,6 +174,7 @@ impl std::fmt::Debug for Settings {
             .field("chromium_apps", &self.chromium_apps)
             .field("macro_enabled", &self.macro_enabled)
             .field("hotkey", &self.hotkey)
+            .field("mode", &self.mode)
             .finish_non_exhaustive()
     }
 }

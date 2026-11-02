@@ -1,0 +1,74 @@
+// Giới thiệu pane: logo, version badge, links.
+
+import { Pane, UITheme } from "../widgets.slint";
+import { Button, Palette } from "std-widgets.slint";
+
+export component AboutPane inherits Pane {
+    title: "Giới thiệu";
+    subtitle: "Về UVie for Windows";
+
+    in property <string> version;
+    callback open-url(string);
+
+    VerticalLayout {
+        spacing: 14px;
+        padding-top: 40px;
+        alignment: start;
+
+        HorizontalLayout {
+            alignment: center;
+            Image {
+                source: @image-url("../../../uvie-win/assets/uvie-icon.png");
+                width: 72px;
+                height: 72px;
+            }
+        }
+        Text {
+            text: "UVie for Windows";
+            font-size: 24px;
+            font-weight: 600;
+            color: Palette.foreground;
+            horizontal-alignment: center;
+        }
+        HorizontalLayout {
+            alignment: center;
+            Rectangle {
+                border-radius: 12px;
+                background: Palette.accent-background.with-alpha(0.15);
+                HorizontalLayout {
+                    padding-left: 12px;
+                    padding-right: 12px;
+                    padding-top: 4px;
+                    padding-bottom: 4px;
+                    Text {
+                        text: "v" + root.version;
+                        font-size: 12px;
+                        color: Palette.foreground;
+                    }
+                }
+            }
+        }
+        Text {
+            text: "Bộ gõ Tiếng Việt nhanh, nhẹ và chính xác cho Windows.\nPowered by uvie-rs — zero-cost Rust engine.";
+            font-size: 13px;
+            color: UITheme.secondary;
+            horizontal-alignment: center;
+        }
+        HorizontalLayout {
+            spacing: 10px;
+            alignment: center;
+            Button {
+                text: "GitHub";
+                clicked => root.open-url("https://github.com/uvie-project/uvie-win");
+            }
+            Button {
+                text: "Cập nhật";
+                clicked => root.open-url("https://github.com/uvie-project/uvie-win/releases");
+            }
+            Button {
+                text: "Báo lỗi";
+                clicked => root.open-url("https://github.com/uvie-project/uvie-win/issues");
+            }
+        }
+    }
+}

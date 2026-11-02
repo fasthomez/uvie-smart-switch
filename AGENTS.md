@@ -3,15 +3,39 @@
 ## Build quick reference
 
 ```powershell
-pwsh scripts/fetch-windowsappsdk.ps1   # once, or when bumping the SDK pin
-cargo build                            # all 3 crates
+pwsh scripts/fetch-windowsappsdk.ps1   # once, or when bumping the SDK pin / building winui
+cargo build                            # uvie-core + uvie-slintui + uvie-win (uvie-winui excluded, see below)
+cargo build -p uvie-win --features winui  # build with the legacy WinUI settings window
+cargo run -p uvie-slintui --example preview  # open the Slint settings window standalone
 cargo test -p uvie-core                # headless tests
 cargo clippy --all-targets -- -D warnings
 cargo fmt --all --check
 ```
 
-`uvie-winui`'s first build is slow (~2-4 min): `windows-bindgen` emits a
-~1.4M-line `bindings.rs` from the winmds. Subsequent builds are cached.
+The Slint settings window (`uvie-slintui`) is the default UI. `uvie-winui`
+remains a workspace member for the `--features winui` fallback, but is
+excluded from `default-members` because its `windows-bindgen` step takes
+minutes (~1.4M-line `bindings.rs`). `--workspace` still covers it.
+
+## uvie-slintui notes
+
+- UI is split: `ui/widgets.slint` (shared controls) + `ui/pages/*.slint`
+  (one per pane) + `ui/settings.slint` (root window). Fluent style only —
+  `build.rs` sets `with_style("fluent")` (material looked wrong; Slint
+  styles are compile-time-only, runtime style switching would need a
+  per-style compile+module dispatch — not worth it). Light/dark is live
+  via `Palette.color-scheme` (`scheme-index` prop → `Settings::mode`).
+- In slint 1.18: `Palette.accent` is now `Palette.accent-background`;
+  top-level `function`s are illegal (use a `global`); assignments inside
+  callbacks need braces (`clicked => { x = 1; }`); children of a plain
+  `Rectangle` do NOT stretch — set `width/height: 100%`; `enabled` can't be
+  redeclared on a component inheriting ScrollView (built-in prop).
+- `match settings.borrow().theme` extended the RefCell borrow through the
+  whole match → `borrow_mut` panic in UI callbacks. Bind it to a `let`
+  first.
+- `run_event_loop_until_quit()` keeps the loop alive after the window
+  hides (close → `CloseRequestResponse::HideWindow`), so the tray can
+  re-show it via a channel + `upgrade_in_event_loop`.
 
 ## Hard-won constraints — read before touching versions
 

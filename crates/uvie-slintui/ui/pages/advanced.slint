@@ -1,0 +1,59 @@
+// Nâng cao pane: orthography, Telex shortcuts, notes.
+
+import { InfoRow, Pane, RowDivider, Section, ToggleRow, UIGlyph } from "../widgets.slint";
+
+export component AdvancedPane inherits Pane {
+    title: "Nâng cao";
+    subtitle: "Tuỳ chọn nâng cao và lưu ý khi sử dụng";
+
+    in-out property <bool> modern-orthography;
+    in-out property <bool> quick-telex;
+    in-out property <bool> quick-start;
+
+    callback save-settings();
+
+    Section {
+        title: "NGÔN NGỮ";
+        ToggleRow {
+            glyph: UIGlyph.book;
+            title: "Chính tả hiện đại";
+            desc: "Bật: hoas → hoá (quy tắc mới). Tắt: hoas → hoà (chính tả truyền thống).";
+            checked <=> root.modern-orthography;
+            toggled => root.save-settings();
+        }
+    }
+
+    Section {
+        title: "GÕ TẮT TELEX";
+        ToggleRow {
+            glyph: UIGlyph.bolt;
+            title: "Quick Telex (gõ kép)";
+            desc: "Gõ đôi phụ âm: cc→ch, gg→gi, hh→nh, kk→kh, nn→ng, qq→qu, pp→ph, tt→th.";
+            checked <=> root.quick-telex;
+            toggled => root.save-settings();
+        }
+        RowDivider {}
+        ToggleRow {
+            glyph: UIGlyph.bolt;
+            title: "Quick Start (gõ nhanh)";
+            desc: "j→gi, f→ph, w→qu ở đầu từ. Tiện khi gõ nhanh.";
+            checked <=> root.quick-start;
+            toggled => root.save-settings();
+        }
+    }
+
+    Section {
+        title: "GHI CHÚ";
+        InfoRow {
+            glyph: UIGlyph.info;
+            title: "Cài đặt áp dụng khi khởi động lại";
+            desc: "Ứng dụng đọc cài đặt lúc khởi động — thay đổi có hiệu lực sau khi mở lại UVie";
+        }
+        RowDivider {}
+        InfoRow {
+            glyph: UIGlyph.wrench;
+            title: "Ứng dụng chạy quyền Admin";
+            desc: "UVie không thể gõ vào các app chạy quyền Administrator";
+        }
+    }
+}

@@ -1,0 +1,127 @@
+// Macro pane: enable toggle + trigger→expansion list with inline add.
+
+import { MacroItem, Pane, RowDivider, Section, ToggleRow, UIGlyph, UITheme } from "../widgets.slint";
+import { Button, LineEdit, Palette } from "std-widgets.slint";
+
+export component MacroPane inherits Pane {
+    title: "Macro";
+    subtitle: "Gõ viết tắt, mở rộng thành văn bản đầy đủ";
+
+    in-out property <bool> macro-enabled;
+    in property <[MacroItem]> macros;
+
+    callback save-settings();
+    callback add-macro(string, string);
+    callback remove-macro(string);
+
+    Section {
+        title: "MACRO VĂN BẢN";
+        ToggleRow {
+            glyph: UIGlyph.bolt;
+            title: "Bật Macro văn bản";
+            desc: "Gõ viết tắt, nhấn Space / Enter để mở rộng thành văn bản đầy đủ";
+            checked <=> root.macro-enabled;
+            toggled => root.save-settings();
+        }
+    }
+
+    Section {
+        title: "DANH SÁCH MACRO";
+
+        HorizontalLayout {
+            padding-left: 14px;
+            padding-right: 14px;
+            padding-top: 8px;
+            padding-bottom: 8px;
+            spacing: 8px;
+            Text {
+                text: "Viết tắt";
+                width: 140px;
+                font-size: 11px;
+                color: UITheme.secondary;
+            }
+            Text {
+                text: "Văn bản thay thế";
+                font-size: 11px;
+                color: UITheme.secondary;
+            }
+        }
+
+        if root.macros.length == 0 : VerticalLayout {
+            padding: 12px;
+            Text {
+                text: "Chưa có macro nào";
+                font-size: 12px;
+                color: UITheme.secondary;
+                horizontal-alignment: center;
+            }
+        }
+
+        for m[i] in root.macros : VerticalLayout {
+            spacing: 0px;
+            if i > 0 : RowDivider {}
+            HorizontalLayout {
+                padding-left: 14px;
+                padding-right: 14px;
+                padding-top: 9px;
+                padding-bottom: 9px;
+                spacing: 8px;
+                Text {
+                    text: m.trigger;
+                    width: 140px;
+                    font-size: 12px;
+                    color: Palette.foreground;
+                    vertical-alignment: center;
+                    overflow: elide;
+                }
+                Text {
+                    text: m.expansion;
+                    font-size: 12px;
+                    color: Palette.foreground;
+                    vertical-alignment: center;
+                    horizontal-stretch: 1;
+                    overflow: elide;
+                }
+                Button {
+                    text: "✕";
+                    clicked => root.remove-macro(m.trigger);
+                }
+            }
+        }
+
+        RowDivider {}
+
+        HorizontalLayout {
+            padding-left: 14px;
+            padding-right: 14px;
+            padding-top: 10px;
+            padding-bottom: 12px;
+            spacing: 8px;
+            trig := LineEdit {
+                placeholder-text: "Viết tắt (vd: sg)";
+                width: 140px;
+            }
+            repl := LineEdit {
+                placeholder-text: "Văn bản thay thế (vd: Sài Gòn)";
+                horizontal-stretch: 1;
+                accepted => {
+                    if (trig.text != "" && self.text != "") {
+                        root.add-macro(trig.text, self.text);
+                        trig.text = "";
+                        self.text = "";
+                    }
+                }
+            }
+            Button {
+                text: "＋ Thêm macro";
+                clicked => {
+                    if (trig.text != "" && repl.text != "") {
+                        root.add-macro(trig.text, repl.text);
+                        trig.text = "";
+                        repl.text = "";
+                    }
+                }
+            }
+        }
+    }
+}

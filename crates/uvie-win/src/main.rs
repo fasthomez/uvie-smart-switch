@@ -1,3 +1,7 @@
+// GUI subsystem — no console window when launched from Explorer or the
+// Run key (parity with uvie-mac's `LSUIElement` agent).
+#![windows_subsystem = "windows"]
+
 //! uvie-win — Vietnamese input method agent for Windows.
 //!
 //! A tray-resident app like uvie-mac's `LSUIElement` agent: no main window,
@@ -19,6 +23,10 @@ use windows::Win32::UI::WindowsAndMessaging::{
 fn main() -> windows::core::Result<()> {
     let app = app::App::new()?;
     app.sync_launch_at_login();
+
+    // Open the settings window on launch — same UX as OpenKey, and gives
+    // immediate visual feedback when started from Explorer or login.
+    ui::open_settings();
 
     // Standard Win32 message loop — the keyboard hook, tray window, and
     // WinEvent hook all deliver on this thread.

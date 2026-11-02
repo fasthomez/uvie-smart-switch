@@ -1,10 +1,7 @@
 ; uvie-win.iss — Inno Setup script for UVie for Windows.
 ;
-; Bundles:
-;   - uvie-win.exe                              (the IME, built by cargo --release)
-;   - Microsoft.WindowsAppRuntime.Bootstrap.dll (unpackaged WASDK loader stub)
-;   - WindowsAppRuntimeInstall-x64.exe          (Microsoft redist, fetched into
-;                                              Frameworks/ by scripts/fetch-windowsappsdk)
+; Bundles uvie-win.exe only — the settings UI is Slint now, so no Windows
+; App SDK runtime or bootstrap DLL is needed.
 ;
 ; Per-user install into %LOCALAPPDATA%\Programs\UVie — no UAC, matching the
 ; app's own convention (settings live in %APPDATA%\UVie, launch-at-login is a
@@ -51,8 +48,6 @@ Name: "desktopicon"; Description: "Create a &desktop shortcut"; GroupDescription
 
 [Files]
 Source: "..\target\release\uvie-win.exe"; DestDir: "{app}"; Flags: ignoreversion
-Source: "..\target\release\Microsoft.WindowsAppRuntime.Bootstrap.dll"; DestDir: "{app}"; Flags: ignoreversion
-Source: "..\Frameworks\WindowsAppSDK\WindowsAppRuntimeInstall-x64.exe"; DestDir: "{tmp}"; Flags: deleteafterinstall
 
 [Icons]
 Name: "{group}\{#AppName}"; Filename: "{app}\{#ExeName}"
@@ -60,9 +55,4 @@ Name: "{group}\Uninstall {#AppName}"; Filename: "{uninstallexe}"
 Name: "{autodesktop}\{#AppName}"; Filename: "{app}\{#ExeName}"; Tasks: desktopicon
 
 [Run]
-; The WinUI 3 settings window needs the Windows App Runtime (framework +
-; DDLM + main packages). The redist is idempotent — a fast no-op when a
-; compatible runtime is already present — so always run it. Must complete
-; before the app is offered for launch.
-Filename: "{tmp}\WindowsAppRuntimeInstall-x64.exe"; Parameters: "--quiet"; StatusMsg: "Installing Windows App Runtime 1.6..."; Flags: waituntilterminated
 Filename: "{app}\{#ExeName}"; Description: "Launch {#AppName}"; Flags: nowait postinstall skipifsilent unchecked

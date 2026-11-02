@@ -20,10 +20,6 @@ jobs:
         with:
           components: rustfmt, clippy
 
-      - name: Fetch Windows App SDK metadata
-        shell: pwsh
-        run: ./scripts/fetch-windowsappsdk.ps1
-
       - name: Cargo fmt
         run: cargo fmt --all --check
 
@@ -31,14 +27,10 @@ jobs:
         run: cargo clippy --all-targets -- -D warnings
 
       - name: Cargo test
-        run: cargo test --workspace
+        run: cargo test
 
       - name: Cargo build (release)
-        run: cargo build --release --workspace
-
-      - name: Stage redistributable
-        shell: pwsh
-        run: Copy-Item Frameworks/WindowsAppSDK/WindowsAppRuntimeInstall-x64.exe target/release/
+        run: cargo build --release
 
       - name: Install Inno Setup
         shell: pwsh
@@ -60,6 +52,4 @@ jobs:
           name: uvie-win-x86_64
           path: |
             target/release/uvie-win.exe
-            target/release/Microsoft.WindowsAppRuntime.Bootstrap.dll
-            target/release/WindowsAppRuntimeInstall-x64.exe
             dist/uvie-win-*-x64-setup.exe

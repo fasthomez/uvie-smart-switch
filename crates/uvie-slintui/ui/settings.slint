@@ -1,0 +1,288 @@
+// Settings window root: sidebar + nav + six panes. Pane bodies live in
+// `pages/*.slint`; shared controls in `widgets.slint`. Vietnamese UI, same
+// layout as crates/uvie-winui/src/settings_window.rs.
+//
+// This file is compiled twice — once per widget style (see `app_fluent.slint`
+// / `app_material.slint` and build.rs) — so the user can pick Fluent or
+// Material at runtime (applied when the window reopens).
+
+import { UIGlyph, UITheme, NavItem, MacroItem } from "widgets.slint";
+import { GeneralPane } from "pages/general.slint";
+import { KeyboardPane } from "pages/keyboard.slint";
+import { MacroPane } from "pages/macro.slint";
+import { AppsPane } from "pages/apps.slint";
+import { AdvancedPane } from "pages/advanced.slint";
+import { AboutPane } from "pages/about.slint";
+import { Palette } from "std-widgets.slint";
+
+export component SettingsWindow inherits Window {
+    title: "UVie for Windows";
+    preferred-width: 880px;
+    preferred-height: 640px;
+    min-width: 700px;
+    min-height: 460px;
+    icon: @image-url("../../uvie-win/assets/uvie-icon.png");
+    background: Palette.background;
+    default-font-family: "Segoe UI";
+
+    // -1 = none yet: the Timer below selects pane 0 on the first frame.
+    // Starting with all panes hidden forces their opacity/x bindings to be
+    // evaluated once, so the first switch animates too (bindings of
+    // never-rendered elements are lazy — they'd snap instead of animate).
+    in-out property <int> nav-index: -1;
+
+    Timer {
+        interval: 30ms;
+        triggered => {
+            root.nav-index = 0;
+            self.running = false;
+        }
+    }
+
+    // Settings fields (two-way so controls can bind directly).
+    in-out property <bool> enabled;
+    in-out property <int> input-method-index; // 0 Telex, 1 VNI, 2 SimpleTelex
+    in-out property <int> scheme-index;      // 0 System, 1 Light, 2 Dark
+    in-out property <bool> per-app-language;
+    in-out property <bool> english-override;
+    in-out property <bool> launch-at-login;
+    in-out property <bool> relaxed-coda;
+    in-out property <bool> auto-capitalize;
+    in-out property <bool> macro-enabled;
+    in-out property <bool> modern-orthography;
+    in-out property <bool> quick-telex;
+    in-out property <bool> quick-start;
+
+    in property <[MacroItem]> macros;
+    in property <[string]> excluded-apps;
+    in property <[string]> chromium-apps;
+    in property <string> version;
+
+    // Any settings-field change → read all props and persist.
+    callback save-settings();
+    callback add-macro(string, string);
+    callback remove-macro(string);
+    callback add-excluded(string);
+    callback remove-excluded(string);
+    callback reset-excluded();
+    callback add-chromium(string);
+    callback remove-chromium(string);
+    callback reset-chromium();
+    callback open-url(string);
+
+    // Light/dark applies instantly via the style palette.
+    changed scheme-index => {
+        Palette.color-scheme =
+            self.scheme-index == 2 ? ColorScheme.dark :
+            self.scheme-index == 1 ? ColorScheme.light :
+            ColorScheme.unknown;
+    }
+
+    HorizontalLayout {
+        spacing: 0px;
+
+        // ---- sidebar ------------------------------------------------------
+        Rectangle {
+            width: 224px;
+            background: Palette.alternate-background;
+
+            Rectangle { // right-edge divider
+                x: parent.width - 1px;
+                width: 1px;
+                height: 100%;
+                background: UITheme.divider;
+            }
+
+            VerticalLayout {
+                padding: 0px;
+                spacing: 0px;
+
+                // Brand header.
+                HorizontalLayout {
+                    padding-left: 14px;
+                    padding-top: 12px;
+                    padding-bottom: 14px;
+                    spacing: 10px;
+                    alignment: start;
+                    Image {
+                        source: @image-url("../../uvie-win/assets/uvie-icon.png");
+                        width: 26px;
+                        height: 26px;
+                    }
+                    VerticalLayout {
+                        spacing: 1px;
+                        alignment: center;
+                        Text {
+                            text: "UVie";
+                            font-size: 15px;
+                            font-weight: 600;
+                            color: Palette.foreground;
+                        }
+                        Text {
+                            text: "Tiếng Việt";
+                            font-size: 11px;
+                            color: UITheme.secondary;
+                        }
+                    }
+                }
+
+                // Nav items.
+                VerticalLayout {
+                    padding-left: 10px;
+                    padding-right: 10px;
+                    spacing: 2px;
+                    alignment: start;
+                    NavItem {
+                        glyph: UIGlyph.settings;
+                        label: "Tổng quan";
+                        selected: root.nav-index == 0;
+                        clicked => { root.nav-index = 0; }
+                    }
+                    NavItem {
+                        glyph: UIGlyph.keyboard;
+                        label: "Bàn phím";
+                        selected: root.nav-index == 1;
+                        clicked => { root.nav-index = 1; }
+                    }
+                    NavItem {
+                        glyph: UIGlyph.pen;
+                        label: "Macro";
+                        selected: root.nav-index == 2;
+                        clicked => { root.nav-index = 2; }
+                    }
+                    NavItem {
+                        glyph: UIGlyph.apps;
+                        label: "Ứng dụng";
+                        selected: root.nav-index == 3;
+                        clicked => { root.nav-index = 3; }
+                    }
+                    NavItem {
+                        glyph: UIGlyph.wrench;
+                        label: "Nâng cao";
+                        selected: root.nav-index == 4;
+                        clicked => { root.nav-index = 4; }
+                    }
+                    NavItem {
+                        glyph: UIGlyph.info;
+                        label: "Giới thiệu";
+                        selected: root.nav-index == 5;
+                        clicked => { root.nav-index = 5; }
+                    }
+                }
+
+                Rectangle { vertical-stretch: 1; }
+
+                // Version footer.
+                VerticalLayout {
+                    padding-left: 16px;
+                    padding-bottom: 12px;
+                    spacing: 1px;
+                    alignment: start;
+                    Text {
+                        text: "Phiên bản " + root.version;
+                        font-size: 11px;
+                        color: UITheme.secondary;
+                    }
+                    Text {
+                        text: "Powered by uvie-rs";
+                        font-size: 11px;
+                        color: UITheme.secondary;
+                    }
+                }
+            }
+        }
+
+        // ---- content --------------------------------------------------------
+        // All panes stay rendered (visible) so their opacity/x bindings are
+        // always evaluated — `visible: false` keeps them lazy, which is why
+        // first-time switches snapped instead of animating. The selected
+        // pane sits at z:2; the TouchArea blocker (z:1) eats clicks that
+        // would fall through its empty areas onto the hidden panes (z:0).
+        Rectangle {
+            clip: true;
+
+            TouchArea {
+                z: 1;
+                width: 100%;
+                height: 100%;
+            }
+
+            GeneralPane {
+                z: root.nav-index == 0 ? 2 : 0;
+                opacity: root.nav-index == 0 ? 1 : 0;
+                x: root.nav-index == 0 ? 0 : 16px;
+                animate opacity { duration: 160ms; easing: ease-out; }
+                animate x { duration: 180ms; easing: ease-out-quad; }
+                ime-enabled <=> root.enabled;
+                input-method-index <=> root.input-method-index;
+                scheme-index <=> root.scheme-index;
+                per-app-language <=> root.per-app-language;
+                english-override <=> root.english-override;
+                launch-at-login <=> root.launch-at-login;
+                save-settings => root.save-settings();
+            }
+
+            KeyboardPane {
+                z: root.nav-index == 1 ? 2 : 0;
+                opacity: root.nav-index == 1 ? 1 : 0;
+                x: root.nav-index == 1 ? 0 : 16px;
+                animate opacity { duration: 160ms; easing: ease-out; }
+                animate x { duration: 180ms; easing: ease-out-quad; }
+                relaxed-coda <=> root.relaxed-coda;
+                auto-capitalize <=> root.auto-capitalize;
+                save-settings => root.save-settings();
+            }
+
+            MacroPane {
+                z: root.nav-index == 2 ? 2 : 0;
+                opacity: root.nav-index == 2 ? 1 : 0;
+                x: root.nav-index == 2 ? 0 : 16px;
+                animate opacity { duration: 160ms; easing: ease-out; }
+                animate x { duration: 180ms; easing: ease-out-quad; }
+                macro-enabled <=> root.macro-enabled;
+                macros: root.macros;
+                save-settings => root.save-settings();
+                add-macro(t, e) => root.add-macro(t, e);
+                remove-macro(t) => root.remove-macro(t);
+            }
+
+            AppsPane {
+                z: root.nav-index == 3 ? 2 : 0;
+                opacity: root.nav-index == 3 ? 1 : 0;
+                x: root.nav-index == 3 ? 0 : 16px;
+                animate opacity { duration: 160ms; easing: ease-out; }
+                animate x { duration: 180ms; easing: ease-out-quad; }
+                excluded-apps: root.excluded-apps;
+                chromium-apps: root.chromium-apps;
+                add-excluded(e) => root.add-excluded(e);
+                remove-excluded(e) => root.remove-excluded(e);
+                reset-excluded => root.reset-excluded();
+                add-chromium(e) => root.add-chromium(e);
+                remove-chromium(e) => root.remove-chromium(e);
+                reset-chromium => root.reset-chromium();
+            }
+
+            AdvancedPane {
+                z: root.nav-index == 4 ? 2 : 0;
+                opacity: root.nav-index == 4 ? 1 : 0;
+                x: root.nav-index == 4 ? 0 : 16px;
+                animate opacity { duration: 160ms; easing: ease-out; }
+                animate x { duration: 180ms; easing: ease-out-quad; }
+                modern-orthography <=> root.modern-orthography;
+                quick-telex <=> root.quick-telex;
+                quick-start <=> root.quick-start;
+                save-settings => root.save-settings();
+            }
+
+            AboutPane {
+                z: root.nav-index == 5 ? 2 : 0;
+                opacity: root.nav-index == 5 ? 1 : 0;
+                x: root.nav-index == 5 ? 0 : 16px;
+                animate opacity { duration: 160ms; easing: ease-out; }
+                animate x { duration: 180ms; easing: ease-out-quad; }
+                version: root.version;
+                open-url(u) => root.open-url(u);
+            }
+        }
+    }
+}

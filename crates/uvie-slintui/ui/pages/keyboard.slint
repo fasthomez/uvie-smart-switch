@@ -1,0 +1,35 @@
+// Bàn phím pane: relaxed coda + auto-capitalize.
+
+import { Pane, Section, ToggleRow, UIGlyph } from "../widgets.slint";
+
+export component KeyboardPane inherits Pane {
+    title: "Bàn phím";
+    subtitle: "Tuỳ chọn kiểu gõ và hành vi bàn phím";
+
+    in-out property <bool> relaxed-coda;
+    in-out property <bool> auto-capitalize;
+
+    callback save-settings();
+
+    Section {
+        title: "VẦN CUỐI";
+        ToggleRow {
+            glyph: UIGlyph.pen;
+            title: "Viết tắt vần cuối (g→ng, h→nh)";
+            desc: "Bật để gõ đặg, nhàh thay vì đặng, nhành. Tiện khi gõ nhanh.";
+            checked <=> root.relaxed-coda;
+            toggled => root.save-settings();
+        }
+    }
+
+    Section {
+        title: "TỰ ĐỘNG HÓA";
+        ToggleRow {
+            glyph: UIGlyph.pen;
+            title: "Viết hoa chữ cái đầu câu";
+            desc: "Tự động viết hoa sau dấu chấm hoặc xuống dòng mới";
+            checked <=> root.auto-capitalize;
+            toggled => root.save-settings();
+        }
+    }
+}
