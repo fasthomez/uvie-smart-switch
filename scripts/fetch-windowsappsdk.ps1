@@ -48,4 +48,15 @@ Invoke-WebRequest -Uri "https://www.nuget.org/api/v2/package/Microsoft.Web.WebVi
 Expand-Archive -Path $wvNupkg -DestinationPath $wvExtract -Force
 Copy-Item (Join-Path $wvExtract "lib\Microsoft.Web.WebView2.Core.winmd") -Destination $dest -Force
 
+# Redistributable for end-user machines (framework-dependent deployment):
+# unpackaged apps need the Windows App Runtime installed — the exe bootstrapper
+# only works once Framework+DDLM+Main packages exist on the box. Ship this
+# installer with uvie-win.exe; aka.ms always serves the latest 1.6.x servicing
+# release, which is what we want for a redist.
+$redist = Join-Path $dest "WindowsAppRuntimeInstall-x64.exe"
+if (-not (Test-Path $redist)) {
+    Write-Host "Downloading WindowsAppRuntimeInstall-x64.exe ..."
+    Invoke-WebRequest -Uri "https://aka.ms/windowsappsdk/1.6/latest/windowsappruntimeinstall-x64.exe" -OutFile $redist
+}
+
 Write-Host "Windows App SDK metadata ready under $dest"

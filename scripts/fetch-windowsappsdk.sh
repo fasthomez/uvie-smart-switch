@@ -57,5 +57,11 @@ for rel in \
 done
 # Microsoft.UI.Xaml.Controls.WebView2 references this winmd.
 cp "$TMP/webview2/lib/Microsoft.Web.WebView2.Core.winmd" "$DEST/"
+
+# Redistributable for end-user machines (see fetch-windowsappsdk.ps1).
+echo "Downloading WindowsAppRuntimeInstall-x64.exe ..."
+curl -sSfL -o "$DEST/WindowsAppRuntimeInstall-x64.exe" \
+    "https://aka.ms/windowsappsdk/1.6/latest/windowsappruntimeinstall-x64.exe"
+
 rm -rf "$TMP"
 echo "Windows App SDK metadata ready under $DEST"

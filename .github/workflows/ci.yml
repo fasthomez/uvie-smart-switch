@@ -36,6 +36,24 @@ jobs:
       - name: Cargo build (release)
         run: cargo build --release --workspace
 
+      - name: Stage redistributable
+        shell: pwsh
+        run: Copy-Item Frameworks/WindowsAppSDK/WindowsAppRuntimeInstall-x64.exe target/release/
+
+      - name: Install Inno Setup
+        shell: pwsh
+        run: winget install --id JRSoftware.InnoSetup -e --accept-package-agreements --accept-source-agreements --silent
+
+      - name: Build installer
+        shell: pwsh
+        run: |
+          $ver = (Select-String -Path crates/uvie-win/Cargo.toml -Pattern '^version = "([^"]+)"').Matches.Groups[1].Value
+          $iscc = @(
+            "C:\Program Files (x86)\Inno Setup 6\iscc.exe",
+            "$env:LOCALAPPDATA\Programs\Inno Setup 6\iscc.exe"
+          ) | Where-Object { Test-Path $_ } | Select-Object -First 1
+          & $iscc "/DAppVersion=$ver" installer/uvie-win.iss
+
       - name: Upload binary
         uses: actions/upload-artifact@v4
         with:
@@ -43,3 +61,5 @@ jobs:
           path: |
             target/release/uvie-win.exe
             target/release/Microsoft.WindowsAppRuntime.Bootstrap.dll
+            target/release/WindowsAppRuntimeInstall-x64.exe
+            dist/uvie-win-*-x64-setup.exe

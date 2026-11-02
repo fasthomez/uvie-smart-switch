@@ -60,7 +60,8 @@ The pinned version is also recorded in `uvie-rs-version`.
 ## Build
 
 ```powershell
-# 1) Fetch Windows App SDK winmds + bootstrap DLL into Frameworks/
+# 1) Fetch Windows App SDK winmds + bootstrap DLL + runtime installer
+#    into Frameworks/
 pwsh scripts/fetch-windowsappsdk.ps1
 #    (or: bash scripts/fetch-windowsappsdk.sh)
 
@@ -70,6 +71,18 @@ cargo build --release
 
 The binary is `target/release/uvie-win.exe`
 (`Microsoft.WindowsAppRuntime.Bootstrap.dll` is copied next to it).
+
+### Installer
+
+```powershell
+iscc installer\uvie-win.iss
+```
+
+Produces `dist\uvie-win-<version>-x64-setup.exe` — a per-user installer
+(no UAC) that bundles `uvie-win.exe`, the bootstrap DLL, and the
+`WindowsAppRuntimeInstall-x64.exe` redistributable, which it runs silently
+during setup so the Settings window works on machines without the Windows
+App Runtime. Requires [Inno Setup 6](https://jrsoftware.org/isinfo.php).
 
 ## Run
 
