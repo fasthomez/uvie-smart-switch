@@ -24,8 +24,8 @@ type MddBootstrapInitialize2 = unsafe extern "system" fn(
 type MddBootstrapShutdown = unsafe extern "system" fn();
 
 const WINDOWSAPPSDK_VERSION: u32 = (1 << 16) | 6; // 1.6
-// WINDOWSAPPSDK_RUNTIME_VERSION_UINT64 from WindowsAppSDK-VersionInfo.h
-// (WASDK 1.6.250108002 → runtime package 6000.373.1641.0).
+                                                  // WINDOWSAPPSDK_RUNTIME_VERSION_UINT64 from WindowsAppSDK-VersionInfo.h
+                                                  // (WASDK 1.6.250108002 → runtime package 6000.373.1641.0).
 const WINDOWSAPPSDK_MIN_VERSION: u64 = 0x1770_0175_0669_0000;
 // MddBootstrapInitializeOptions::OnNoMatch_ShowUI: when no compatible
 // runtime is installed, show the "install Windows App Runtime" dialog
