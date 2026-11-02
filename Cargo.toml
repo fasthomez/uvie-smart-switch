@@ -13,7 +13,7 @@ license = "MIT OR Apache-2.0"
 repository = "https://github.com/uvie-project/uvie-win"
 
 [workspace.dependencies]
-uvie = { git = "https://github.com/uvie-project/uvie-rs", tag = "v2.8.1" }
+uvie = { git = "https://github.com/uvie-project/uvie-rs", tag = "v2.8.2" }
 uvie-core = { path = "crates/uvie-core" }
 uvie-winui = { path = "crates/uvie-winui" }
 windows = "0.62"

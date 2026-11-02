@@ -15,16 +15,22 @@ use windows::Win32::System::LibraryLoader::{GetProcAddress, LoadLibraryW};
 type MddBootstrapInitialize2 = unsafe extern "system" fn(
     major_minor_version: u32,
     version_tag: PCWSTR,
+    // PACKAGE_VERSION is a UINT64 union: Major<<48 | Minor<<32 | Build<<16 | Revision.
+    min_version: u64,
     options: u32,
-    package_full_name_length: *mut u32,
-    package_full_name: *mut u16,
 ) -> HRESULT;
 
 #[allow(non_snake_case)]
 type MddBootstrapShutdown = unsafe extern "system" fn();
 
 const WINDOWSAPPSDK_VERSION: u32 = (1 << 16) | 6; // 1.6
-const ON_ERROR_FAIL_FAST: u32 = 8;
+// WINDOWSAPPSDK_RUNTIME_VERSION_UINT64 from WindowsAppSDK-VersionInfo.h
+// (WASDK 1.6.250108002 → runtime package 6000.373.1641.0).
+const WINDOWSAPPSDK_MIN_VERSION: u64 = 0x1770_0175_0669_0000;
+// MddBootstrapInitializeOptions::OnNoMatch_ShowUI: when no compatible
+// runtime is installed, show the "install Windows App Runtime" dialog
+// rather than silently failing (OnError_FailFast = 0x4 would kill the IME).
+const ON_NO_MATCH_SHOW_UI: u32 = 0x0008;
 
 /// Handle that keeps the bootstrap DLL loaded; `Drop` releases the runtime.
 pub struct Bootstrap {
@@ -93,9 +99,8 @@ impl Bootstrap {
             let hr = init(
                 WINDOWSAPPSDK_VERSION,
                 PCWSTR::null(),
-                ON_ERROR_FAIL_FAST,
-                std::ptr::null_mut(),
-                std::ptr::null_mut(),
+                WINDOWSAPPSDK_MIN_VERSION,
+                ON_NO_MATCH_SHOW_UI,
             );
             if let Err(e) = hr.ok() {
                 let _ = FreeLibrary(dll);
