@@ -58,6 +58,7 @@ export component SettingsWindow inherits Window {
     in property <[string]> chromium-apps;
     in property <[string]> running-apps;
     in property <string> version;
+    in property <string> hotkey-label;
 
     // Any settings-field change → read all props and persist.
     callback save-settings();
@@ -221,6 +222,7 @@ export component SettingsWindow inherits Window {
                 per-app-language <=> root.per-app-language;
                 english-override <=> root.english-override;
                 launch-at-login <=> root.launch-at-login;
+                hotkey-label: root.hotkey-label;
                 save-settings => root.save-settings();
             }
 

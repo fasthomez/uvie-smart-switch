@@ -3,15 +3,18 @@
 //! `EventTap` orchestration in uvie-mac.
 
 use std::cell::RefCell;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::rc::Rc;
+use std::time::SystemTime;
 
+use serde::de::DeserializeOwned;
 use uvie_core::dispatcher::{Context, Dispatch, Dispatcher, InputLanguage};
 use uvie_core::engine_session::{EngineOptions, EngineSession};
 use uvie_core::keys::KeyEvent;
 use uvie_core::macros::MacroTable;
 use uvie_core::memory::LanguageMemory;
 use uvie_core::settings::{LanguagePref, Settings};
+use windows::Win32::Foundation::HWND;
 
 use crate::foreground::FocusWatcher;
 use crate::inject;
@@ -48,6 +51,13 @@ struct Shared {
     memory: LanguageMemory,
     foreground_exe: String,
     paths: Paths,
+    /// Last-seen mtimes — the settings window writes the same files from
+    /// another thread in this process; the tray timer polls these.
+    settings_mtime: Option<SystemTime>,
+    macros_mtime: Option<SystemTime>,
+    /// Tray window handle, needed to re-register the global hotkey when
+    /// `Settings.hotkey` changes.
+    tray_hwnd: HWND,
 }
 
 impl Shared {
@@ -69,6 +79,45 @@ impl Shared {
     fn save(&self) {
         let _ = self.memory.save(&self.paths.memory);
     }
+
+    /// Re-read settings/macros when their files changed on disk (the
+    /// settings window writes them from another thread in this process;
+    /// hand-edits are picked up too). Parse failures keep the old values —
+    /// the writer may be mid-write.
+    fn reload_changed(&mut self) {
+        if let Some(new) = reload_json::<Settings>(&self.paths.settings, &mut self.settings_mtime) {
+            let hotkey_changed = new.hotkey != self.settings.hotkey;
+            self.settings = new;
+            self.apply_engine_options();
+            self.dispatcher.macro_enabled = self.settings.macro_enabled;
+            self.dispatcher.auto_capitalize = self.settings.auto_capitalize;
+            if hotkey_changed && !self.tray_hwnd.is_invalid() {
+                tray::update_hotkey(self.tray_hwnd, &self.settings.hotkey);
+            }
+            let _ = startup::set_launch_at_login(self.settings.launch_at_login);
+        }
+        if let Some(macros) = reload_json::<MacroTable>(&self.paths.macros, &mut self.macros_mtime)
+        {
+            self.dispatcher.macros = macros;
+        }
+    }
+}
+
+fn file_mtime(path: &Path) -> Option<SystemTime> {
+    std::fs::metadata(path).ok()?.modified().ok()
+}
+
+/// Load a JSON file only when its mtime differs from `last`; `last` is
+/// advanced on every successful *read* so a corrupt file isn't re-parsed
+/// every tick (a partial write gets a fresh mtime when it completes).
+fn reload_json<T: DeserializeOwned>(path: &Path, last: &mut Option<SystemTime>) -> Option<T> {
+    let mtime = file_mtime(path)?;
+    if *last == Some(mtime) {
+        return None;
+    }
+    let text = std::fs::read_to_string(path).ok()?;
+    *last = Some(mtime);
+    serde_json::from_str(&text).ok()
 }
 
 /// Owns the OS plumbing. Lives on the message-loop thread.
@@ -93,6 +142,9 @@ impl App {
             settings,
             memory,
             foreground_exe: String::new(),
+            settings_mtime: file_mtime(&paths.settings),
+            macros_mtime: file_mtime(&paths.macros),
+            tray_hwnd: HWND::default(),
             paths,
         }));
         shared.borrow_mut().apply_engine_options();
@@ -153,9 +205,11 @@ impl App {
                 tray::CMD_QUIT => unsafe {
                     windows::Win32::UI::WindowsAndMessaging::PostQuitMessage(0);
                 },
+                tray::CMD_SYNC_SETTINGS => s.reload_changed(),
                 _ => {}
             }
         })?;
+        shared.borrow_mut().tray_hwnd = tray.hwnd();
 
         // -- foreground-app watcher -----------------------------------------
         // Our own exe name, so the focus watcher can ignore the tray

@@ -26,8 +26,8 @@ pub enum UiMode {
 }
 
 /// Global keyboard shortcut binding (e.g. the Vi/En toggle).
-/// Serialized as e.g. `"Ctrl+Shift+V"`; parsing lives in the host crate
-/// where VK codes are available.
+/// Serialized as `{ "ctrl": true, "shift": true, "alt": false, "vk": 90 }`
+/// — `vk` is a Win32 virtual-key code.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Hotkey {
     pub ctrl: bool,

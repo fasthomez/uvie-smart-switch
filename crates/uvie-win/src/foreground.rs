@@ -66,15 +66,17 @@ unsafe extern "system" fn win_event_proc(
     if hwnd.is_invalid() {
         return;
     }
-    if let Some(exe) = process_exe_name(hwnd) {
-        FOCUS_HANDLER.with(|h| {
-            if let Ok(mut g) = h.try_borrow_mut() {
-                if let Some(f) = g.as_mut() {
-                    f(exe);
-                }
+    // Empty string when the owning process can't be resolved (elevated /
+    // protected windows) — still delivered so a previously attributed exe
+    // doesn't stick and wrongly apply that app's exclusion/language prefs.
+    let exe = process_exe_name(hwnd).unwrap_or_default();
+    FOCUS_HANDLER.with(|h| {
+        if let Ok(mut g) = h.try_borrow_mut() {
+            if let Some(f) = g.as_mut() {
+                f(exe);
             }
-        });
-    }
+        }
+    });
 }
 
 /// exe file name (lowercase, e.g. `notepad.exe`) of the process that owns

@@ -106,6 +106,15 @@ minutes (~1.4M-line `bindings.rs`). `--workspace` still covers it.
 - **`bash` on Windows PATH is often WSL's bash.** The fetch script must work
   in both Git Bash and WSL (unzip → bsdtar → python3/python fall-through;
   GNU tar cannot read zip).
+- **Settings/macros hot-reload is timer-based.** `tray.rs` runs a 1s
+  `WM_TIMER` → `Shared::reload_changed` re-reads `settings.json` /
+  `macros.json` when mtimes change (settings window writes them in-process).
+  Touching either file requires no IPC — but anything that must react to a
+  settings change (e.g. `RegisterHotKey`) has to be re-run in `reload_changed`.
+- **Known issue (winui feature only)**: closing the WinUI settings window
+  kills the XAML thread and `Application::Start` can't run twice — the
+  window can't reopen (Slint path hides instead of destroying). Fix would
+  need `AppWindow.Closing` → cancel + `Hide()`.
 
 ## IME architecture notes
 

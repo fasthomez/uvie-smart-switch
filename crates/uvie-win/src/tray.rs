@@ -19,10 +19,10 @@ use windows::Win32::UI::Shell::{
 };
 use windows::Win32::UI::WindowsAndMessaging::{
     AppendMenuW, CreatePopupMenu, CreateWindowExW, DefWindowProcW, DestroyMenu, DestroyWindow,
-    GetCursorPos, LoadIconW, PostQuitMessage, RegisterClassExW, SetForegroundWindow,
-    TrackPopupMenu, CW_USEDEFAULT, HICON, IDI_APPLICATION, MF_SEPARATOR, MF_STRING,
+    GetCursorPos, KillTimer, LoadIconW, PostQuitMessage, RegisterClassExW, SetForegroundWindow,
+    SetTimer, TrackPopupMenu, CW_USEDEFAULT, HICON, IDI_APPLICATION, MF_SEPARATOR, MF_STRING,
     TPM_BOTTOMALIGN, TPM_LEFTALIGN, WM_COMMAND, WM_DESTROY, WM_HOTKEY, WM_LBUTTONDBLCLK,
-    WM_RBUTTONUP, WM_USER, WNDCLASSEXW, WS_EX_NOACTIVATE,
+    WM_RBUTTONUP, WM_TIMER, WM_USER, WNDCLASSEXW, WS_EX_NOACTIVATE,
 };
 
 /// App icon resource id (app.rc: `IDI_APP_ICON ICON "assets/uvie.ico"`).
@@ -44,6 +44,13 @@ fn app_icon(hinst: HINSTANCE) -> HICON {
 pub const CMD_TOGGLE_LANGUAGE: usize = 1;
 pub const CMD_OPEN_SETTINGS: usize = 2;
 pub const CMD_QUIT: usize = 3;
+/// Synthetic command driven by `TIMER_SETTINGS`: re-read settings.json /
+/// macros.json when their mtimes change (the settings window runs in this
+/// process but owns its own copy of the files).
+pub const CMD_SYNC_SETTINGS: usize = 4;
+
+/// Timer id for the settings/macro file poll.
+const TIMER_SETTINGS: usize = 1;
 
 /// Tray callback message id (NOTIFYICONDATAW::uCallbackMessage).
 const WM_TRAYICON: u32 = WM_USER + 0x55;
@@ -143,14 +150,31 @@ impl TrayIcon {
                 hotkey_modifiers(hotkey),
                 hotkey.vk,
             );
+            // Poll the settings/macro files once a second: the settings
+            // window writes them in-process, and this is how the engine
+            // side learns about changes (cheaper than directory watching).
+            let _ = SetTimer(Some(hwnd), TIMER_SETTINGS, 1000, None);
         }
         Ok(Self { hwnd })
     }
 
-    /// Window handle behind the tray icon (e.g. for SetForegroundWindow).
-    #[allow(dead_code)]
+    /// Window handle behind the tray icon — needed to re-register the
+    /// global hotkey when Settings.hotkey changes.
     pub fn hwnd(&self) -> HWND {
         self.hwnd
+    }
+}
+
+/// Re-register the Vi/En toggle hotkey after the binding changed.
+pub fn update_hotkey(hwnd: HWND, hotkey: &Hotkey) {
+    unsafe {
+        let _ = UnregisterHotKey(Some(hwnd), HOTKEY_TOGGLE);
+        let _ = RegisterHotKey(
+            Some(hwnd),
+            HOTKEY_TOGGLE,
+            hotkey_modifiers(hotkey),
+            hotkey.vk,
+        );
     }
 }
 
@@ -165,6 +189,7 @@ impl Drop for TrayIcon {
         unsafe {
             let _ = Shell_NotifyIconW(NIM_DELETE, &data);
             let _ = UnregisterHotKey(Some(self.hwnd), HOTKEY_TOGGLE);
+            let _ = KillTimer(Some(self.hwnd), TIMER_SETTINGS);
             let _ = DestroyWindow(self.hwnd);
         }
         MENU_HANDLER.with(|h| *h.borrow_mut() = None);
@@ -201,6 +226,18 @@ unsafe extern "system" fn wnd_proc(
                     }
                 }
             });
+            LRESULT(0)
+        }
+        WM_TIMER => {
+            if wparam.0 == TIMER_SETTINGS {
+                MENU_HANDLER.with(|h| {
+                    if let Ok(mut g) = h.try_borrow_mut() {
+                        if let Some(f) = g.as_mut() {
+                            f(CMD_SYNC_SETTINGS);
+                        }
+                    }
+                });
+            }
             LRESULT(0)
         }
         WM_COMMAND => {

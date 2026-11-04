@@ -14,6 +14,7 @@ export component GeneralPane inherits Pane {
     in-out property <bool> per-app-language;
     in-out property <bool> english-override;
     in-out property <bool> launch-at-login;
+    in property <string> hotkey-label;
 
     callback save-settings();
 
@@ -112,8 +113,8 @@ export component GeneralPane inherits Pane {
         title: "PHÍM TẮT CHUYỂN NGÔN NGỮ";
         InfoRow {
             glyph: UIGlyph.keyboard;
-            title: "Ctrl + Shift + Z";
-            desc: "Bật / tắt Tiếng Việt từ bất kỳ ứng dụng nào";
+            title: root.hotkey-label;
+            desc: "Bật / tắt Tiếng Việt từ bất kỳ ứng dụng nào (đổi trong settings.json)";
         }
     }
 }

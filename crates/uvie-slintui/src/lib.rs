@@ -17,7 +17,7 @@ use std::rc::Rc;
 use std::sync::mpsc::{Receiver, Sender};
 
 use uvie_core::macros::MacroTable;
-use uvie_core::settings::{Settings, UiMode, DEFAULT_CHROMIUM_APPS};
+use uvie_core::settings::{Hotkey, Settings, UiMode, DEFAULT_CHROMIUM_APPS};
 use uvie_core::InputMethod;
 
 slint::include_modules!();
@@ -106,6 +106,7 @@ fn run(
         win.set_modern_orthography(s.modern_orthography);
         win.set_quick_telex(s.quick_telex);
         win.set_quick_start(s.quick_start);
+        win.set_hotkey_label(hotkey_label(&s.hotkey).into());
     }
     refresh_models(&win, &state);
 
@@ -139,6 +140,7 @@ fn run(
                 s.modern_orthography = win.get_modern_orthography();
                 s.quick_telex = win.get_quick_telex();
                 s.quick_start = win.get_quick_start();
+                win.set_hotkey_label(hotkey_label(&s.hotkey).into());
             }
             state.save_settings();
         });
@@ -315,6 +317,38 @@ fn refresh_models(win: &SettingsWindow, state: &Rc<State>) {
 fn strings_model(items: &[String]) -> slint::ModelRc<slint::SharedString> {
     let v: Vec<slint::SharedString> = items.iter().map(|s| s.as_str().into()).collect();
     std::rc::Rc::new(slint::VecModel::from(v)).into()
+}
+
+/// Human-readable hotkey label for the General pane ("Ctrl + Shift + Z").
+fn hotkey_label(h: &Hotkey) -> String {
+    let mut s = String::new();
+    if h.ctrl {
+        s += "Ctrl + ";
+    }
+    if h.alt {
+        s += "Alt + ";
+    }
+    if h.shift {
+        s += "Shift + ";
+    }
+    s += &vk_name(h.vk);
+    s
+}
+
+/// Common Win32 VK codes → display names for `hotkey_label`.
+fn vk_name(vk: u32) -> String {
+    match vk {
+        0x41..=0x5A => char::from_u32(vk).unwrap().to_string(), // VK_A..VK_Z
+        0x30..=0x39 => char::from_u32(vk).unwrap().to_string(), // VK_0..VK_9
+        0x70..=0x87 => format!("F{}", vk - 0x6F),               // VK_F1..VK_F24
+        0x20 => "Space".into(),
+        0x09 => "Tab".into(),
+        0x0D => "Enter".into(),
+        0x1B => "Esc".into(),
+        0x08 => "Backspace".into(),
+        0x2E => "Delete".into(),
+        _ => format!("0x{vk:02X}"),
+    }
 }
 
 /// Snapshot running processes via ToolHelp32 → unique lowercase exe names,
