@@ -56,6 +56,7 @@ export component SettingsWindow inherits Window {
     in property <[MacroItem]> macros;
     in property <[string]> excluded-apps;
     in property <[string]> chromium-apps;
+    in property <[string]> running-apps;
     in property <string> version;
 
     // Any settings-field change → read all props and persist.
@@ -68,6 +69,7 @@ export component SettingsWindow inherits Window {
     callback add-chromium(string);
     callback remove-chromium(string);
     callback reset-chromium();
+    callback refresh-running-apps();
     callback open-url(string);
 
     // Light/dark applies instantly via the style palette.
@@ -254,12 +256,14 @@ export component SettingsWindow inherits Window {
                 animate x { duration: 180ms; easing: ease-out-quad; }
                 excluded-apps: root.excluded-apps;
                 chromium-apps: root.chromium-apps;
+                running-apps: root.running-apps;
                 add-excluded(e) => root.add-excluded(e);
                 remove-excluded(e) => root.remove-excluded(e);
                 reset-excluded => root.reset-excluded();
                 add-chromium(e) => root.add-chromium(e);
                 remove-chromium(e) => root.remove-chromium(e);
                 reset-chromium => root.reset-chromium();
+                refresh-running => root.refresh-running-apps();
             }
 
             AdvancedPane {

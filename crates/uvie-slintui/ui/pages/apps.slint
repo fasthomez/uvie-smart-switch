@@ -8,6 +8,7 @@ export component AppsPane inherits Pane {
 
     in property <[string]> excluded-apps;
     in property <[string]> chromium-apps;
+    in property <[string]> running-apps;
 
     callback add-excluded(string);
     callback remove-excluded(string);
@@ -15,22 +16,27 @@ export component AppsPane inherits Pane {
     callback add-chromium(string);
     callback remove-chromium(string);
     callback reset-chromium();
+    callback refresh-running();
 
     AppListSection {
         title: "ỨNG DỤNG LOẠI TRỪ";
         desc: "Tắt UVie for Windows cho các ứng dụng trong danh sách";
         items: root.excluded-apps;
+        running-apps: root.running-apps;
         add(exe) => root.add-excluded(exe);
         remove(exe) => root.remove-excluded(exe);
         reset => root.reset-excluded();
+        refresh-running => root.refresh-running();
     }
 
     AppListSection {
         title: "CHROMIUM / TRÌNH DUYỆT";
         desc: "Nếu gõ trong trình duyệt Chromium bị lỗi (mất ký tự, nhân đôi), thêm app vào danh sách này — UVie sẽ chọn-và-gõ-đè thay vì xoá lùi";
         items: root.chromium-apps;
+        running-apps: root.running-apps;
         add(exe) => root.add-chromium(exe);
         remove(exe) => root.remove-chromium(exe);
         reset => root.reset-chromium();
+        refresh-running => root.refresh-running();
     }
 }

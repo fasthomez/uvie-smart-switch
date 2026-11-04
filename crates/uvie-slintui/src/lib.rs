@@ -188,6 +188,17 @@ fn run(
 
     win.on_open_url(|url| open_url(&url));
 
+    // Running-process picker (Apps pane): re-enumerate on each expand so
+    // the list reflects what is actually running right now.
+    win.set_running_apps(strings_model(&running_processes()));
+    {
+        let win = win.as_weak();
+        win.unwrap().on_refresh_running_apps(move || {
+            win.unwrap()
+                .set_running_apps(strings_model(&running_processes()));
+        });
+    }
+
     // Close → hide, keep the event loop + component alive so the tray can
     // re-show the window later.
     win.window()
@@ -304,6 +315,49 @@ fn refresh_models(win: &SettingsWindow, state: &Rc<State>) {
 fn strings_model(items: &[String]) -> slint::ModelRc<slint::SharedString> {
     let v: Vec<slint::SharedString> = items.iter().map(|s| s.as_str().into()).collect();
     std::rc::Rc::new(slint::VecModel::from(v)).into()
+}
+
+/// Snapshot running processes via ToolHelp32 → unique lowercase exe names,
+/// sorted. Powers the Apps pane's "pick a running app" flow so users don't
+/// have to type `chrome.exe` by hand. Our own exe is omitted — excluding
+/// UVie itself is meaningless (the hook already skips our windows).
+fn running_processes() -> Vec<String> {
+    use windows::Win32::Foundation::CloseHandle;
+    use windows::Win32::System::Diagnostics::ToolHelp::{
+        CreateToolhelp32Snapshot, Process32FirstW, Process32NextW, PROCESSENTRY32W,
+        TH32CS_SNAPPROCESS,
+    };
+    let mut names = Vec::new();
+    unsafe {
+        let snap = match CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0) {
+            Ok(h) => h,
+            Err(_) => return names,
+        };
+        let mut pe = PROCESSENTRY32W {
+            dwSize: std::mem::size_of::<PROCESSENTRY32W>() as u32,
+            ..Default::default()
+        };
+        if Process32FirstW(snap, &mut pe).is_ok() {
+            loop {
+                let len = pe
+                    .szExeFile
+                    .iter()
+                    .position(|&c| c == 0)
+                    .unwrap_or(pe.szExeFile.len());
+                let name = String::from_utf16_lossy(&pe.szExeFile[..len]).to_lowercase();
+                if !name.is_empty() && name != "uvie-win.exe" {
+                    names.push(name);
+                }
+                if Process32NextW(snap, &mut pe).is_err() {
+                    break;
+                }
+            }
+        }
+        let _ = CloseHandle(snap);
+    }
+    names.sort_unstable();
+    names.dedup();
+    names
 }
 
 /// Open a URL in the system browser (About-pane links).

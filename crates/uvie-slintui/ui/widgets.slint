@@ -316,15 +316,19 @@ export component NavItem inherits Rectangle {
     }
 }
 
-// App-list card: description + exe rows + add/reset footer.
+// App-list card: description + exe rows + add/reset footer + running-apps picker.
 export component AppListSection inherits VerticalLayout {
     in property <string> title;
     in property <string> desc;
     in property <[string]> items;
+    in property <[string]> running-apps;
     in property <string> placeholder: "Tên tiến trình (vd: chrome.exe)";
     callback add(string);
     callback remove(string);
     callback reset();
+    callback refresh-running();
+
+    property <bool> show-running: false;
 
     spacing: 8px;
 
@@ -410,6 +414,69 @@ export component AppListSection inherits VerticalLayout {
             Button {
                 text: "Reset mặc định";
                 clicked => root.reset();
+            }
+        }
+
+        RowDivider {}
+
+        // Running-apps picker: expanding refreshes the process snapshot so
+        // the list always shows what is running right now.
+        HorizontalLayout {
+            padding-left: 14px;
+            padding-right: 14px;
+            padding-top: 8px;
+            padding-bottom: 8px;
+            Button {
+                text: root.show-running ? "▾ Ẩn app đang chạy" : "▸ Chọn từ app đang chạy…";
+                clicked => {
+                    if (!root.show-running) {
+                        root.refresh-running();
+                    }
+                    root.show-running = !root.show-running;
+                }
+            }
+        }
+
+        if root.show-running : Rectangle {
+            height: 176px;
+            clip: true;
+            ScrollView {
+                width: 100%;
+                height: 100%;
+                VerticalLayout {
+                    padding-left: 8px;
+                    padding-right: 8px;
+                    padding-top: 4px;
+                    padding-bottom: 8px;
+                    spacing: 0px;
+
+                    if root.running-apps.length == 0 : Text {
+                        text: "Không đọc được danh sách tiến trình";
+                        font-size: 12px;
+                        color: UITheme.secondary;
+                        horizontal-alignment: center;
+                    }
+
+                    for exe in root.running-apps : Rectangle {
+                        height: 28px;
+                        border-radius: 4px;
+                        background: ta.has-hover ? UITheme.hover : transparent;
+                        HorizontalLayout {
+                            padding-left: 10px;
+                            padding-right: 10px;
+                            Text {
+                                text: exe;
+                                font-size: 12px;
+                                color: Palette.foreground;
+                                vertical-alignment: center;
+                                overflow: elide;
+                            }
+                        }
+                        ta := TouchArea {
+                            clicked => root.add(exe);
+                        }
+                    }
+                }
             }
         }
     }
