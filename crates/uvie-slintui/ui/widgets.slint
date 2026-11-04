@@ -278,7 +278,6 @@ export component NavItem inherits Rectangle {
     border-radius: 6px;
     background: root.selected ? UITheme.accent-tint
         : (touch.has-hover ? UITheme.hover : transparent);
-    animate background { duration: 120ms; }
 
     Rectangle {
         x: 6px;
@@ -288,7 +287,6 @@ export component NavItem inherits Rectangle {
         border-radius: 1.5px;
         background: Palette.accent-background;
         opacity: root.selected ? 1 : 0;
-        animate opacity { duration: 160ms; }
     }
 
     HorizontalLayout {
@@ -312,6 +310,32 @@ export component NavItem inherits Rectangle {
     }
 
     touch := TouchArea {
+        clicked => root.clicked();
+    }
+}
+
+// Compact ghost icon button — per-row delete actions, quieter than a
+// full std Button.
+export component GhostButton inherits Rectangle {
+    in property <string> text;
+    callback clicked;
+
+    width: 24px;
+    height: 24px;
+    border-radius: 4px;
+    background: ta.has-hover ? UITheme.hover : transparent;
+
+    Text {
+        text: root.text;
+        font-size: 11px;
+        color: ta.has-hover ? Palette.foreground : UITheme.secondary;
+        horizontal-alignment: center;
+        vertical-alignment: center;
+        width: 100%;
+        height: 100%;
+    }
+
+    ta := TouchArea {
         clicked => root.clicked();
     }
 }
@@ -365,9 +389,9 @@ export component AppListSection inherits VerticalLayout {
             if i > 0 : RowDivider {}
             HorizontalLayout {
                 padding-left: 14px;
-                padding-right: 14px;
-                padding-top: 9px;
-                padding-bottom: 9px;
+                padding-right: 10px;
+                padding-top: 7px;
+                padding-bottom: 7px;
                 spacing: 8px;
                 Text {
                     text: item;
@@ -377,7 +401,7 @@ export component AppListSection inherits VerticalLayout {
                     horizontal-stretch: 1;
                     overflow: elide;
                 }
-                Button {
+                GhostButton {
                     text: "✕";
                     clicked => root.remove(item);
                 }

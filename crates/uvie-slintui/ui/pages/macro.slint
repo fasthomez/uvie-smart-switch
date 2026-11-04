@@ -1,6 +1,6 @@
 // Macro pane: enable toggle + trigger→expansion list with inline add.
 
-import { MacroItem, Pane, RowDivider, Section, ToggleRow, UIGlyph, UITheme } from "../widgets.slint";
+import { GhostButton, MacroItem, Pane, RowDivider, Section, ToggleRow, UIGlyph, UITheme } from "../widgets.slint";
 import { Button, LineEdit, Palette } from "std-widgets.slint";
 
 export component MacroPane inherits Pane {
@@ -82,7 +82,7 @@ export component MacroPane inherits Pane {
                     horizontal-stretch: 1;
                     overflow: elide;
                 }
-                Button {
+                GhostButton {
                     text: "✕";
                     clicked => root.remove-macro(m.trigger);
                 }

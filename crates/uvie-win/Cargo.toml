@@ -12,16 +12,9 @@ build = "build.rs"
 name = "uvie-win"
 path = "src/main.rs"
 
-[features]
-# The Slint settings window is the default. `winui` restores the WinUI 3
-# view (uvie-winui crate — slow windows-bindgen build).
-default = []
-winui = ["dep:uvie-winui"]
-
 [dependencies]
 uvie-core.workspace = true
 uvie-slintui.workspace = true
-uvie-winui = { workspace = true, optional = true }
 windows = { workspace = true, features = [
     "Win32_Foundation",
     "Win32_UI_WindowsAndMessaging",

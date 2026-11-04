@@ -25,19 +25,8 @@ export component SettingsWindow inherits Window {
     background: Palette.background;
     default-font-family: "Segoe UI";
 
-    // -1 = none yet: the Timer below selects pane 0 on the first frame.
-    // Starting with all panes hidden forces their opacity/x bindings to be
-    // evaluated once, so the first switch animates too (bindings of
-    // never-rendered elements are lazy — they'd snap instead of animate).
-    in-out property <int> nav-index: -1;
-
-    Timer {
-        interval: 30ms;
-        triggered => {
-            root.nav-index = 0;
-            self.running = false;
-        }
-    }
+    // Selected pane index. Switching is instant — no transition animations.
+    in-out property <int> nav-index: 0;
 
     // Settings fields (two-way so controls can bind directly).
     in-out property <bool> enabled;
@@ -196,11 +185,10 @@ export component SettingsWindow inherits Window {
         }
 
         // ---- content --------------------------------------------------------
-        // All panes stay rendered (visible) so their opacity/x bindings are
-        // always evaluated — `visible: false` keeps them lazy, which is why
-        // first-time switches snapped instead of animating. The selected
-        // pane sits at z:2; the TouchArea blocker (z:1) eats clicks that
-        // would fall through its empty areas onto the hidden panes (z:0).
+        // All panes stay rendered; the selected one sits at z:2 above a
+        // TouchArea blocker (z:1) that eats clicks falling through its
+        // empty areas onto the hidden panes (z:0). No transitions — pane
+        // switches are instant.
         Rectangle {
             clip: true;
 
@@ -213,9 +201,6 @@ export component SettingsWindow inherits Window {
             GeneralPane {
                 z: root.nav-index == 0 ? 2 : 0;
                 opacity: root.nav-index == 0 ? 1 : 0;
-                x: root.nav-index == 0 ? 0 : 16px;
-                animate opacity { duration: 160ms; easing: ease-out; }
-                animate x { duration: 180ms; easing: ease-out-quad; }
                 ime-enabled <=> root.enabled;
                 input-method-index <=> root.input-method-index;
                 scheme-index <=> root.scheme-index;
@@ -229,9 +214,6 @@ export component SettingsWindow inherits Window {
             KeyboardPane {
                 z: root.nav-index == 1 ? 2 : 0;
                 opacity: root.nav-index == 1 ? 1 : 0;
-                x: root.nav-index == 1 ? 0 : 16px;
-                animate opacity { duration: 160ms; easing: ease-out; }
-                animate x { duration: 180ms; easing: ease-out-quad; }
                 relaxed-coda <=> root.relaxed-coda;
                 auto-capitalize <=> root.auto-capitalize;
                 save-settings => root.save-settings();
@@ -240,9 +222,6 @@ export component SettingsWindow inherits Window {
             MacroPane {
                 z: root.nav-index == 2 ? 2 : 0;
                 opacity: root.nav-index == 2 ? 1 : 0;
-                x: root.nav-index == 2 ? 0 : 16px;
-                animate opacity { duration: 160ms; easing: ease-out; }
-                animate x { duration: 180ms; easing: ease-out-quad; }
                 macro-enabled <=> root.macro-enabled;
                 macros: root.macros;
                 save-settings => root.save-settings();
@@ -253,9 +232,6 @@ export component SettingsWindow inherits Window {
             AppsPane {
                 z: root.nav-index == 3 ? 2 : 0;
                 opacity: root.nav-index == 3 ? 1 : 0;
-                x: root.nav-index == 3 ? 0 : 16px;
-                animate opacity { duration: 160ms; easing: ease-out; }
-                animate x { duration: 180ms; easing: ease-out-quad; }
                 excluded-apps: root.excluded-apps;
                 chromium-apps: root.chromium-apps;
                 running-apps: root.running-apps;
@@ -271,9 +247,6 @@ export component SettingsWindow inherits Window {
             AdvancedPane {
                 z: root.nav-index == 4 ? 2 : 0;
                 opacity: root.nav-index == 4 ? 1 : 0;
-                x: root.nav-index == 4 ? 0 : 16px;
-                animate opacity { duration: 160ms; easing: ease-out; }
-                animate x { duration: 180ms; easing: ease-out-quad; }
                 modern-orthography <=> root.modern-orthography;
                 quick-telex <=> root.quick-telex;
                 quick-start <=> root.quick-start;
@@ -283,9 +256,6 @@ export component SettingsWindow inherits Window {
             AboutPane {
                 z: root.nav-index == 5 ? 2 : 0;
                 opacity: root.nav-index == 5 ? 1 : 0;
-                x: root.nav-index == 5 ? 0 : 16px;
-                animate opacity { duration: 160ms; easing: ease-out; }
-                animate x { duration: 180ms; easing: ease-out-quad; }
                 version: root.version;
                 open-url(u) => root.open-url(u);
             }

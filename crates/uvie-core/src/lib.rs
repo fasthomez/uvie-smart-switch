@@ -3,7 +3,7 @@
 //! Mirrors uvie-mac's `Core/` + `Features/` layers: it owns the `uvie`
 //! engine session, decides how each keystroke is dispatched, and holds the
 //! user settings / macros / per-app memory that the Win32 front end
-//! (`uvie-win`) and the WinUI 3 settings window (`uvie-winui`) share.
+//! (`uvie-win`) and the Slint settings window (`uvie-slintui`) share.
 //!
 //! The crate is intentionally free of Windows API calls so all dispatch and
 //! typing behavior is unit-testable on any platform — the same split that

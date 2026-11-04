@@ -4,11 +4,7 @@ members = [
     "crates/uvie-core",
     "crates/uvie-slintui",
     "crates/uvie-win",
-    "crates/uvie-winui",
 ]
-# Default build/test/clippy scope — uvie-winui stays out because its
-# windows-bindgen step takes minutes; build it explicitly with
-# `cargo build -p uvie-winui` or `cargo build --workspace`.
 default-members = [
     "crates/uvie-core",
     "crates/uvie-slintui",
@@ -25,7 +21,6 @@ repository = "https://github.com/uvie-project/uvie-win"
 uvie = { git = "https://github.com/uvie-project/uvie-rs", tag = "v2.8.2" }
 uvie-core = { path = "crates/uvie-core" }
 uvie-slintui = { path = "crates/uvie-slintui" }
-uvie-winui = { path = "crates/uvie-winui" }
 slint = { version = "1.13", default-features = false, features = [
     "std",
     "compat-1-2",
@@ -37,7 +32,6 @@ slint-build = "1.13"
 windows = "0.62"
 windows-core = "0.62"
 windows-link = "0.2"
-windows-bindgen = "0.62.1"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 

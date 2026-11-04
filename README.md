@@ -18,15 +18,15 @@ Same feature set as uvie-mac:
   Settings → Macro, stored in `%APPDATA%\UVie\macros.json`)
 - App exclusion list (e.g. terminals, password fields) plus a Chromium-app
   compatibility list — browsers get a select-and-overwrite injection mode
-  instead of synthetic backspaces (omnibox-safe, like uvie-mac)
+  instead of synthetic backspaces (omnibox-safe, like uvie-mac). Both lists
+  can pick from currently running processes, no need to type exe names.
 - System-tray icon with Vi/En toggle, settings and quit
 - Launch at login (per-user registry key)
 - English-override mode: Ctrl+Shift+Z toggles Vi/En globally (tray menu too)
 - Engine options: quick Telex, quick-start consonants, modern orthography,
   relaxed coda, auto-capitalize
-- WinUI 3 settings window (unpackaged app, bootstrapped at runtime) —
-  sidebar + panes mirroring uvie-mac's preferences: Tổng quan, Bàn phím,
-  Macro, Ứng dụng, Nâng cao, Giới thiệu (Vietnamese UI)
+- Slint settings window — sidebar + panes mirroring uvie-mac's preferences:
+  Tổng quan, Bàn phím, Macro, Ứng dụng, Nâng cao, Giới thiệu (Vietnamese UI)
 
 ## Architecture
 
@@ -35,13 +35,13 @@ Cargo workspace with three crates:
 | Crate | Role |
 |---|---|
 | `uvie-core` | Platform-neutral engine plumbing: `Dispatcher` (key → `Action` state machine), `EngineSession` (wraps `UltraFastViEngine`), settings/macros/language-memory persistence, `InputMethod`. Fully unit-tested — no Win32 imports. |
-| `uvie-win` | The IME binary. Win32 integration via `windows-rs`: LL keyboard hook, SendInput injection (marked `LLKHF_INJECTED` + magic `dwExtraInfo` to detect echoes), foreground-app watcher (WinEvent hook → exe name), tray icon (hidden window + `Shell_NotifyIcon`), registry launch-at-login, message loop. |
-| `uvie-winui` | WinUI 3 settings window. Generates its own `windows-rs` bindings at build time with `windows-bindgen` from the Windows App SDK winmds in `Frameworks/WindowsAppSDK` (fetched at dev time, never committed — same convention as uvie-mac's `Frameworks/`). Spawns XAML on its own thread so it can live in the same process as the hook. |
+| `uvie-win` | The IME binary. Win32 integration via `windows-rs`: LL keyboard hook, SendInput injection (marked `LLKHF_INJECTED` + magic `dwExtraInfo` to detect echoes), foreground-app watcher (WinEvent hook → exe name), tray icon (hidden window + `Shell_NotifyIcon`), registry launch-at-login, settings hot-reload timer, message loop. |
+| `uvie-slintui` | Slint settings window (fluent style). Runs on its own thread inside `uvie-win.exe`, shows/hides via a channel from the tray, and is the sole writer of `settings.json` / `macros.json` — the app side polls file mtimes once a second to pick up changes. |
 
 The engine dependency is a git pin:
 
 ```toml
-uvie = { git = "https://github.com/uvie-project/uvie-rs", tag = "v2.8.1" }
+uvie = { git = "https://github.com/uvie-project/uvie-rs", tag = "v2.8.2" }
 ```
 
 The pinned version is also recorded in `uvie-rs-version`.
@@ -50,27 +50,14 @@ The pinned version is also recorded in `uvie-rs-version`.
 
 - Windows 10 1809+ (x86_64)
 - [Rust](https://rustup.rs) stable (MSVC toolchain) with `rustfmt` + `clippy`
-- **Windows App Runtime 1.6+** — required only for the WinUI 3 settings
-  window; the IME itself is pure Win32. Install it once via
-  [`WindowsAppRuntimeInstall-x64.exe`](https://learn.microsoft.com/en-us/windows/apps/windows-app-sdk/downloads)
-  (the exe then self-bootstraps via `MddBootstrapInitialize2`; the
-  `Microsoft.WindowsAppRuntime.Bootstrap.dll` stub is copied next to
-  `uvie-win.exe` by the build script).
 
 ## Build
 
 ```powershell
-# 1) Fetch Windows App SDK winmds + bootstrap DLL + runtime installer
-#    into Frameworks/
-pwsh scripts/fetch-windowsappsdk.ps1
-#    (or: bash scripts/fetch-windowsappsdk.sh)
-
-# 2) Build
 cargo build --release
 ```
 
-The binary is `target/release/uvie-win.exe`
-(`Microsoft.WindowsAppRuntime.Bootstrap.dll` is copied next to it).
+The binary is `target/release/uvie-win.exe` — fully self-contained.
 
 ### Installer
 
@@ -79,10 +66,8 @@ iscc installer\uvie-win.iss
 ```
 
 Produces `dist\uvie-win-<version>-x64-setup.exe` — a per-user installer
-(no UAC) that bundles `uvie-win.exe`, the bootstrap DLL, and the
-`WindowsAppRuntimeInstall-x64.exe` redistributable, which it runs silently
-during setup so the Settings window works on machines without the Windows
-App Runtime. Requires [Inno Setup 6](https://jrsoftware.org/isinfo.php).
+(no UAC) that bundles `uvie-win.exe`. Requires
+[Inno Setup 6](https://jrsoftware.org/isinfo.php).
 
 ## Run
 
@@ -98,15 +83,16 @@ Right-click the tray icon to toggle Vi/En, open settings, or quit — or press
 
 - Keystrokes for **elevated** apps are invisible to the low-level hook and
   pass through uncomposed (same gap as uvie-mac's secure-input mode).
-- Changes made in the Settings window apply on the next launch (no live
-  reload yet).
+- Non-Latin keyboard layouts are not auto-detected yet — keys still feed
+  the engine (`non_latin_layout` is a TODO in `app.rs`).
 
 ## Development
 
 ```powershell
-cargo test --workspace          # uvie-core unit tests (headless)
-cargo clippy --all-targets      # must be warning-free (CI enforces -D warnings)
-cargo fmt --all --check         # CI enforces rustfmt
+cargo test                    # uvie-core unit tests (headless)
+cargo clippy --all-targets    # must be warning-free (CI enforces -D warnings)
+cargo fmt --all --check       # CI enforces rustfmt
+cargo run -p uvie-slintui --example preview   # preview the settings window
 ```
 
 ## License

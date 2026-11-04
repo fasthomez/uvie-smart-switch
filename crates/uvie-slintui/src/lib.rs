@@ -1,9 +1,7 @@
 //! Slint settings UI for UVie.
 //!
-//! Alternative to the WinUI 3 window (`uvie-winui`) — same six panes and the
-//! same persistence contract (this window is the sole writer of
-//! `settings.json` / `macros.json`), but compiles in seconds instead of
-//! generating ~1.4M lines of windows-rs bindings. UI sources live in `ui/`:
+//! Six panes and the persistence contract (this window is the sole writer
+//! of `settings.json` / `macros.json`). UI sources live in `ui/`:
 //! `widgets.slint` (shared controls), `pages/*.slint` (one per pane),
 //! `settings.slint` (window root), all fluent-styled.
 //!
