@@ -127,7 +127,8 @@ impl App {
 
         // -- tray ----------------------------------------------------------
         let shared_menu = Rc::clone(&shared);
-        let tray = TrayIcon::create(move |cmd| {
+        let hotkey = shared.borrow().settings.hotkey.clone();
+        let tray = TrayIcon::create(&hotkey, move |cmd| {
             let mut s = shared_menu.borrow_mut();
             match cmd {
                 tray::CMD_TOGGLE_LANGUAGE => {

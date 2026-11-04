@@ -6,11 +6,13 @@
 
 use std::cell::RefCell;
 
+use uvie_core::settings::Hotkey;
 use windows::core::{w, PCWSTR};
 use windows::Win32::Foundation::{HINSTANCE, HWND, LPARAM, LRESULT, POINT, WPARAM};
 use windows::Win32::System::LibraryLoader::GetModuleHandleW;
 use windows::Win32::UI::Input::KeyboardAndMouse::{
-    RegisterHotKey, UnregisterHotKey, MOD_CONTROL, MOD_SHIFT, VK_Z,
+    RegisterHotKey, UnregisterHotKey, HOT_KEY_MODIFIERS, MOD_ALT, MOD_CONTROL, MOD_NOREPEAT,
+    MOD_SHIFT,
 };
 use windows::Win32::UI::Shell::{
     Shell_NotifyIconW, NIF_ICON, NIF_MESSAGE, NIF_TIP, NIM_ADD, NIM_DELETE, NOTIFYICONDATAW,
@@ -48,8 +50,24 @@ const WM_TRAYICON: u32 = WM_USER + 0x55;
 
 const WINDOW_CLASS: PCWSTR = w!("UVieWinTrayWindow");
 
-/// RegisterHotKey id for the global Vi/En toggle (Ctrl+Shift+Z).
+/// RegisterHotKey id for the global Vi/En toggle.
 const HOTKEY_TOGGLE: i32 = 1;
+
+/// `Settings.hotkey` (Ctrl/Alt/Shift + VK) → RegisterHotKey modifier flags.
+/// MOD_NOREPEAT keeps a held chord from toggling on every key repeat.
+fn hotkey_modifiers(h: &Hotkey) -> HOT_KEY_MODIFIERS {
+    let mut m = MOD_NOREPEAT;
+    if h.ctrl {
+        m |= MOD_CONTROL;
+    }
+    if h.alt {
+        m |= MOD_ALT;
+    }
+    if h.shift {
+        m |= MOD_SHIFT;
+    }
+    m
+}
 
 type MenuHandler = RefCell<Option<Box<dyn FnMut(usize)>>>;
 
@@ -63,8 +81,12 @@ pub struct TrayIcon {
 
 impl TrayIcon {
     /// Creates the hidden message window + adds the tray icon.
-    /// `on_menu` receives one of the `CMD_*` constants.
-    pub fn create(on_menu: impl FnMut(usize) + 'static) -> windows::core::Result<Self> {
+    /// `hotkey` is the Vi/En toggle binding from `Settings`; `on_menu`
+    /// receives one of the `CMD_*` constants.
+    pub fn create(
+        hotkey: &Hotkey,
+        on_menu: impl FnMut(usize) + 'static,
+    ) -> windows::core::Result<Self> {
         MENU_HANDLER.with(|h| *h.borrow_mut() = Some(Box::new(on_menu)));
 
         let hinst = unsafe { GetModuleHandleW(None)? };
@@ -113,13 +135,13 @@ impl TrayIcon {
         data.hIcon = app_icon(hinst.into());
         unsafe {
             Shell_NotifyIconW(NIM_ADD, &data).ok()?;
-            // Global Vi/En toggle — same default as uvie-mac (Ctrl+Shift+Z).
+            // Global Vi/En toggle — the binding from Settings.hotkey.
             // WM_HOTKEY is delivered to this window's proc.
             let _ = RegisterHotKey(
                 Some(hwnd),
                 HOTKEY_TOGGLE,
-                MOD_CONTROL | MOD_SHIFT,
-                VK_Z.0 as u32,
+                hotkey_modifiers(hotkey),
+                hotkey.vk,
             );
         }
         Ok(Self { hwnd })

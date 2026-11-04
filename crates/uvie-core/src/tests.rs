@@ -121,6 +121,22 @@ fn ctrl_chord_passes_and_resets() {
 }
 
 #[test]
+fn win_chord_passes_and_resets() {
+    // Win+R / Win+E / Win+arrows / ... belong to the shell — the LL hook
+    // must let them through or every Win+key shortcut dies (and the engine
+    // would inject the raw letter into the foreground app).
+    let mut d = dispatcher();
+    let _ = replay(&mut d, "vie");
+    let mut chord = KeyEvent::char('r');
+    chord.win = true;
+    assert!(matches!(
+        d.handle(chord, &Context::default()),
+        Dispatch::Pass(_)
+    ));
+    assert!(!d.session.is_composing());
+}
+
+#[test]
 fn injected_echoes_are_passed() {
     let mut d = dispatcher();
     let mut key = KeyEvent::char('a');

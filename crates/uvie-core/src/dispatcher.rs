@@ -101,9 +101,9 @@ impl Dispatcher {
             return Dispatch::pass();
         }
 
-        // Shortcut chords (Ctrl+C, Alt+Tab, ...) never reach the engine and
-        // cancel any composing word, like uvie-mac does.
-        if key.ctrl || key.alt {
+        // Shortcut chords (Ctrl+C, Alt+Tab, Win+R, ...) never reach the
+        // engine and cancel any composing word, like uvie-mac does.
+        if key.ctrl || key.alt || key.win {
             self.session.reset();
             self.caret_back = 0;
             return Dispatch::pass();

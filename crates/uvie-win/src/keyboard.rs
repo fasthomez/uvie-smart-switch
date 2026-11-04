@@ -18,8 +18,8 @@ use uvie_core::keys::{KeyEvent, KeyKind};
 use windows::Win32::Foundation::{LPARAM, LRESULT, WPARAM};
 use windows::Win32::UI::Input::KeyboardAndMouse::{
     GetAsyncKeyState, GetKeyboardLayout, GetKeyboardState, ToUnicodeEx, VIRTUAL_KEY, VK_BACK,
-    VK_CONTROL, VK_DELETE, VK_DOWN, VK_END, VK_ESCAPE, VK_HOME, VK_LEFT, VK_MENU, VK_NEXT,
-    VK_PACKET, VK_PRIOR, VK_RETURN, VK_RIGHT, VK_TAB, VK_UP,
+    VK_CONTROL, VK_DELETE, VK_DOWN, VK_END, VK_ESCAPE, VK_HOME, VK_LEFT, VK_LWIN, VK_MENU, VK_NEXT,
+    VK_PACKET, VK_PRIOR, VK_RETURN, VK_RIGHT, VK_RWIN, VK_TAB, VK_UP,
 };
 use windows::Win32::UI::WindowsAndMessaging::{
     CallNextHookEx, GetForegroundWindow, GetWindowThreadProcessId, SetWindowsHookExW,
@@ -91,39 +91,67 @@ fn key_down(vk: VIRTUAL_KEY) -> bool {
 }
 
 fn translate(k: &KBDLLHOOKSTRUCT) -> KeyEvent {
+    // Only treat *our own* SendInput echoes as injected — injected
+    // keystrokes from VNC/RDP/automation must still compose. Echoes skip
+    // translation entirely: the dispatcher drops them anyway, and unicode
+    // echoes carry garbage scan codes (UTF-16 units, vkCode 0).
+    if k.flags.contains(LLKHF_INJECTED) && k.dwExtraInfo == crate::inject::UVIE_EXTRA_INFO {
+        return KeyEvent {
+            kind: KeyKind::Other,
+            ctrl: false,
+            alt: false,
+            win: false,
+            injected: true,
+        };
+    }
+
     let vk = VIRTUAL_KEY(k.vkCode as u16);
     let ctrl = key_down(VK_CONTROL);
     let alt = k.flags.contains(LLKHF_ALTDOWN) || key_down(VK_MENU);
+    let win = key_down(VK_LWIN) || key_down(VK_RWIN);
 
-    let kind = match vk {
-        VK_BACK => KeyKind::Backspace,
-        VK_RETURN | VK_TAB | VK_ESCAPE => KeyKind::Break,
-        VK_LEFT | VK_RIGHT | VK_UP | VK_DOWN | VK_HOME | VK_END | VK_PRIOR | VK_NEXT
-        | VK_DELETE => KeyKind::Navigation,
-        _ if is_modifier_vk(vk.0) => KeyKind::Other,
-        // Unicode-packet input (KEYEVENTF_UNICODE: automation, remote
-        // desktops, password-manager auto-type) carries the UTF-16 code
-        // unit in scanCode; vkCode is always VK_PACKET.
-        VK_PACKET => match char::from_u32(k.scanCode) {
-            Some(c) => KeyKind::Char(c),
-            None => KeyKind::Other,
-        },
-        _ => match vk_to_char(vk, k.scanCode, k.flags.contains(LLKHF_EXTENDED)) {
-            Some(c) => KeyKind::Char(c),
-            None => KeyKind::Other,
-        },
+    let kind = if ctrl || alt || win {
+        // Modifier chords (Ctrl+C, Alt+Tab, Win+R, Win+arrows, ...) are never
+        // engine input — the dispatcher resets and passes on the flags alone.
+        // Skipping ToUnicodeEx here also avoids needlessly disturbing the
+        // kernel dead-key state on every shortcut.
+        KeyKind::Other
+    } else {
+        match vk {
+            VK_BACK => KeyKind::Backspace,
+            VK_RETURN | VK_TAB | VK_ESCAPE => KeyKind::Break,
+            VK_LEFT | VK_RIGHT | VK_UP | VK_DOWN | VK_HOME | VK_END | VK_PRIOR | VK_NEXT
+            | VK_DELETE => KeyKind::Navigation,
+            _ if is_modifier_vk(vk.0) => KeyKind::Other,
+            // Unicode-packet input (KEYEVENTF_UNICODE: automation, remote
+            // desktops, password-manager auto-type) carries the UTF-16 code
+            // unit in scanCode; vkCode is always VK_PACKET.
+            VK_PACKET => match char::from_u32(k.scanCode) {
+                Some(c) => KeyKind::Char(c),
+                None => KeyKind::Other,
+            },
+            _ => match vk_to_char(vk, k.scanCode, k.flags.contains(LLKHF_EXTENDED)) {
+                Some(c) => KeyKind::Char(c),
+                None => KeyKind::Other,
+            },
+        }
     };
 
     KeyEvent {
         kind,
         ctrl,
         alt,
-        // Only treat *our own* SendInput echoes as injected — injected
-        // keystrokes from VNC/RDP/automation must still compose.
-        injected: k.flags.contains(LLKHF_INJECTED)
-            && k.dwExtraInfo == crate::inject::UVIE_EXTRA_INFO,
+        win,
+        injected: false,
     }
 }
+
+/// `ToUnicodeEx` wFlags bit 2: do not change the kernel-mode keyboard
+/// buffer state (Windows 10 1607+). Without it, every translation we run in
+/// the hook mutates the shared dead-key/ligature buffer — e.g. translating a
+/// user's `^` dead key on US-International consumes it, and the app renders
+/// a plain `e` instead of `ê`.
+const TU_DONT_CHANGE_STATE: u32 = 4;
 
 /// Resolve a VK to the character it produces under the foreground window's
 /// keyboard layout (input layouts are per-focus).
@@ -138,7 +166,14 @@ fn vk_to_char(vk: VIRTUAL_KEY, scan: u32, extended: bool) -> Option<char> {
         let hkl = GetKeyboardLayout(tid);
         let mut buf = [0u16; 8];
         let scan = if extended { scan | 0xE000 } else { scan };
-        let n = ToUnicodeEx(vk.0 as u32, scan, &state, &mut buf, 0, Some(hkl));
+        let n = ToUnicodeEx(
+            vk.0 as u32,
+            scan,
+            &state,
+            &mut buf,
+            TU_DONT_CHANGE_STATE,
+            Some(hkl),
+        );
         match n.cmp(&0) {
             std::cmp::Ordering::Greater => {
                 String::from_utf16(&buf[..n as usize]).ok()?.chars().next()
