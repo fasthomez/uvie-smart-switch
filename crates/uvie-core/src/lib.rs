@@ -1,19 +1,13 @@
-//! uvie-core — platform-independent core of UVie for Windows.
+//! uvie-core — Windows facade over the shared `uvie-host` crate plus the
+//! Windows-specific settings schema.
 //!
-//! Mirrors uvie-mac's `Core/` + `Features/` layers: it owns the `uvie`
-//! engine session, decides how each keystroke is dispatched, and holds the
-//! user settings / macros / per-app memory that the Win32 front end
-//! (`uvie-win`) and the Slint settings window (`uvie-slintui`) share.
-//!
-//! The crate is intentionally free of Windows API calls so all dispatch and
-//! typing behavior is unit-testable on any platform — the same split that
-//! lets uvie-mac run `DispatcherTests`/`EngineTypingTests` headlessly.
+//! Dispatch, engine sessions, macros and per-app memory live in `uvie-host`
+//! (same repo/tag as the `uvie` engine). This crate re-exports them under the
+//! historical module paths the Win32 front end and the Slint settings window
+//! already use, and owns `settings` (Win32 virtual-key hotkeys, the
+//! chromium exe list, UI mode).
 
-pub mod dispatcher;
-pub mod engine_session;
-pub mod keys;
-pub mod macros;
-pub mod memory;
+pub use uvie_host::{dispatcher, engine_session, keys, macros, memory};
 pub mod settings;
 
 pub use dispatcher::{Context, Dispatch, Dispatcher, InputAction, InputLanguage};
@@ -22,7 +16,7 @@ pub use keys::{KeyEvent, KeyKind};
 pub use macros::{MacroEntry, MacroTable};
 pub use memory::LanguageMemory;
 pub use settings::{Hotkey, LanguagePref, Settings};
-pub use uvie::InputMethod;
+pub use uvie_host::InputMethod;
 
 #[cfg(test)]
 mod tests;

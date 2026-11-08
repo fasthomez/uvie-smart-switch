@@ -18,7 +18,8 @@ license = "MIT OR Apache-2.0"
 repository = "https://github.com/uvie-project/uvie-win"
 
 [workspace.dependencies]
-uvie = { git = "https://github.com/uvie-project/uvie-rs", tag = "v2.8.3" }
+uvie = { git = "https://github.com/uvie-project/uvie-rs", tag = "uvie-host-v0.1.0" }
+uvie-host = { git = "https://github.com/uvie-project/uvie-rs", tag = "uvie-host-v0.1.0" }
 uvie-core = { path = "crates/uvie-core" }
 uvie-slintui = { path = "crates/uvie-slintui" }
 slint = { version = "1.13", default-features = false, features = [
