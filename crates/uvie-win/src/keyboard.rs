@@ -18,8 +18,8 @@ use uvie_core::keys::{KeyEvent, KeyKind};
 use windows::Win32::Foundation::{LPARAM, LRESULT, WPARAM};
 use windows::Win32::UI::Input::KeyboardAndMouse::{
     GetAsyncKeyState, GetKeyboardLayout, GetKeyboardState, ToUnicodeEx, VIRTUAL_KEY, VK_BACK,
-    VK_CONTROL, VK_DELETE, VK_DOWN, VK_END, VK_ESCAPE, VK_HOME, VK_LEFT, VK_LWIN, VK_MENU, VK_NEXT,
-    VK_PACKET, VK_PRIOR, VK_RETURN, VK_RIGHT, VK_RWIN, VK_TAB, VK_UP,
+    VK_CONTROL, VK_DELETE, VK_DOWN, VK_END, VK_ESCAPE, VK_HOME, VK_INSERT, VK_LEFT, VK_LWIN,
+    VK_MENU, VK_NEXT, VK_PACKET, VK_PRIOR, VK_RETURN, VK_RIGHT, VK_RWIN, VK_SHIFT, VK_TAB, VK_UP,
 };
 use windows::Win32::UI::WindowsAndMessaging::{
     CallNextHookEx, GetForegroundWindow, GetWindowThreadProcessId, SetWindowsHookExW,
@@ -100,6 +100,7 @@ fn translate(k: &KBDLLHOOKSTRUCT) -> KeyEvent {
             kind: KeyKind::Other,
             ctrl: false,
             alt: false,
+            shift: false,
             win: false,
             injected: true,
         };
@@ -109,6 +110,12 @@ fn translate(k: &KBDLLHOOKSTRUCT) -> KeyEvent {
     let ctrl = key_down(VK_CONTROL);
     let alt = k.flags.contains(LLKHF_ALTDOWN) || key_down(VK_MENU);
     let win = key_down(VK_LWIN) || key_down(VK_RWIN);
+    // The LL hook runs before the async key state is updated for the key that
+    // triggered this callback (LowLevelKeyboardProc docs), so this reads the
+    // modifier state as of the *previous* event. That is exactly what the
+    // dispatcher needs: shift/ctrl/alt on a letter or arrow were pressed
+    // before the event being translated.
+    let shift = key_down(VK_SHIFT);
 
     let kind = if ctrl || alt || win {
         // Modifier chords (Ctrl+C, Alt+Tab, Win+R, Win+arrows, ...) are never
@@ -119,9 +126,15 @@ fn translate(k: &KBDLLHOOKSTRUCT) -> KeyEvent {
     } else {
         match vk {
             VK_BACK => KeyKind::Backspace,
-            VK_RETURN | VK_TAB | VK_ESCAPE => KeyKind::Break,
-            VK_LEFT | VK_RIGHT | VK_UP | VK_DOWN | VK_HOME | VK_END | VK_PRIOR | VK_NEXT
-            | VK_DELETE => KeyKind::Navigation,
+            VK_RETURN => KeyKind::Enter,
+            VK_TAB => KeyKind::Tab,
+            VK_ESCAPE => KeyKind::Escape,
+            VK_LEFT => KeyKind::Left,
+            VK_RIGHT => KeyKind::Right,
+            VK_UP | VK_DOWN | VK_HOME | VK_END | VK_PRIOR | VK_NEXT | VK_INSERT => {
+                KeyKind::Navigation
+            }
+            VK_DELETE => KeyKind::ForwardDelete,
             _ if is_modifier_vk(vk.0) => KeyKind::Other,
             // Unicode-packet input (KEYEVENTF_UNICODE: automation, remote
             // desktops, password-manager auto-type) carries the UTF-16 code
@@ -141,6 +154,7 @@ fn translate(k: &KBDLLHOOKSTRUCT) -> KeyEvent {
         kind,
         ctrl,
         alt,
+        shift,
         win,
         injected: false,
     }

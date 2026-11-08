@@ -237,8 +237,10 @@ impl App {
                     s.dispatcher.set_language(lang);
                 }
             }
-            // Focus change always drops in-flight composition, like uvie-mac.
-            s.dispatcher.session.reset();
+            // Focus change drops the in-flight composition and swaps the
+            // per-app sentence-start state, like uvie-mac.
+            let app = s.foreground_exe.clone();
+            s.dispatcher.on_app_switch(&app);
         })?;
 
         Ok(Self {
