@@ -2,3 +2,4 @@
 /Frameworks
 /dist
 *.pdb
+.DS_Store
