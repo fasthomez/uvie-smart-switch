@@ -226,6 +226,12 @@ impl App {
                 return;
             }
             let mut s = shared_focus.borrow_mut();
+            // EVENT_SYSTEM_FOREGROUND fires for window-to-window switches
+            // inside one process too; a same-app hop must not drop the
+            // composition or churn the per-app sentence memory.
+            if exe.eq_ignore_ascii_case(&s.foreground_exe) {
+                return;
+            }
             s.foreground_exe = exe;
             if s.settings.per_app_language {
                 let exe = s.foreground_exe.clone();
