@@ -42,10 +42,15 @@ jobs:
         run: cargo clippy --all-targets -- -D warnings
 
       - name: Cargo test
-        run: cargo test
+        run: cargo test --workspace
 
       - name: Cargo build (release)
-        run: cargo build --release
+        run: cargo build --release --workspace
+
+      - name: Validate Chromium extension
+        run: |
+          node --check browser-extension/background.js
+          node --check browser-extension/popup.js
 
       - name: Sign uvie-win.exe (SignPath)
         if: vars.SIGNPATH_ENABLED == 'true'
@@ -105,14 +110,19 @@ jobs:
           $stage = "dist/uvie-win"
           New-Item -ItemType Directory -Force -Path $stage | Out-Null
           Copy-Item target/release/uvie-win.exe $stage/
+          Copy-Item target/release/uvie-native-host.exe $stage/
+          Copy-Item -Recurse browser-extension $stage/
+          New-Item -ItemType Directory -Force -Path "$stage/scripts" | Out-Null
+          Copy-Item scripts/install-native-host.ps1 "$stage/scripts/"
           Copy-Item README.md $stage/
-          Compress-Archive -Path "$stage/*" -DestinationPath "dist/uvie-for-windows-x86_64.zip" -Force
+          Compress-Archive -Path "$stage/*" -DestinationPath "dist/uvie-smart-switch-x86_64.zip" -Force
 
       - name: Create GitHub release
         uses: softprops/action-gh-release@v2
         with:
-          name: UVie for Windows ${{ github.ref_name }}
+          name: UVie Smart Switch ${{ github.ref_name }}
           files: |
-            dist/uvie-for-windows-x86_64.zip
+            dist/uvie-smart-switch-x86_64.zip
             dist/uvie-win-*-x64-setup.exe
           generate_release_notes: true
+          prerelease: ${{ contains(github.ref_name, 'preview') || contains(github.ref_name, 'rc') }}

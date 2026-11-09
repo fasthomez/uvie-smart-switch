@@ -27,10 +27,15 @@ jobs:
         run: cargo clippy --all-targets -- -D warnings
 
       - name: Cargo test
-        run: cargo test
+        run: cargo test --workspace
 
       - name: Cargo build (release)
-        run: cargo build --release
+        run: cargo build --release --workspace
+
+      - name: Validate Chromium extension
+        run: |
+          node --check browser-extension/background.js
+          node --check browser-extension/popup.js
 
       - name: Install Inno Setup
         shell: pwsh
@@ -52,4 +57,7 @@ jobs:
           name: uvie-win-x86_64
           path: |
             target/release/uvie-win.exe
+            target/release/uvie-native-host.exe
+            browser-extension/**
+            scripts/install-native-host.ps1
             dist/uvie-win-*-x64-setup.exe

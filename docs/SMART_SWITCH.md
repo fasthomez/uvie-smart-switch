@@ -8,21 +8,24 @@ Only `VI` and `EN` exist. Changing the language hotkey in a browser tab remember
 - `uvie-native-host`: Chromium Native Messaging, length-prefixed stdio protocol. Stores only hostname, browser executable, tab/window IDs, random session ID, timestamp. Does not store URL paths, tokens, keystrokes, or page content.
 - `browser-extension`: Chromium MV3 service worker reports active tab and sends periodic heartbeat.
 
-## Setup (development)
+## Browser companion setup
 
-1. Build on Windows: `cargo build --release -p uvie-win -p uvie-native-host`.
-2. Replace the example `path` in `browser-extension/native-host.example.json` with the full path to `uvie-native-host.exe`.
-3. Load unpacked `browser-extension` in `chrome://extensions`, copy its extension ID.
-4. Replace EXTENSION_ID in the Native Messaging manifest's `allowed_origins`.
-5. Register the manifest path under `HKCU\Software\Google\Chrome\NativeMessagingHosts\com.fasthomez.uvie_smart_switch` (default string value). Edge uses `HKCU\Software\Microsoft\Edge\NativeMessagingHosts\com.fasthomez.uvie_smart_switch`.
-6. Launch `uvie-win.exe`. Open two tabs, toggle the VI/EN hotkey separately, and switch between them.
+See [Chrome / Edge / Brave install instructions](../browser-extension/README.md). The `scripts/install-native-host.ps1` script registers the companion without administrator rights.
 
-Set a domain default in `%APPDATA%\UVie\browser-memory.json`, for example `{ "domains": { "remote.example.com": false }, "tabs": {} }`. `true` means VI; `false` means EN. Restart UVie after editing external memory.
+## Precedence
 
-## Limitations / validation needed
+1. Last manual VI/EN toggle for the current browser tab, saved in `%APPDATA%\UVie\browser-memory.json`.
+2. Domain preference set from the extension popup, in the same file.
+3. Existing per-application preference.
 
-- Prototype currently associates active tab with browser **executable**, not precise Windows HWND. Multiple windows of the same browser may produce incorrect attribution; a future native window correlation layer is needed before production release.
-- Extension does not know exact browser identity for Brave if its UA masks Brave as Chrome; configure browser-specific variant or improve native host binding.
-- Browser startup/reconnection relies on a 30s heartbeat; stale context expires after 90s and falls back to app memory.
-- Actual Windows binary and browser end-to-end tests remain required.
-- Reuses upstream `uvie-win` and `uvie-rs`, preserving their MIT/Apache-2.0 licenses and notices.
+## Window correlation
+
+The Native Messaging host validates the real foreground browser process and matches the tab title against its top-level Windows window title before writing a snapshot with HWND. The UVie agent verifies that HWND is the current foreground window. This prevents other Chrome windows or Edge tabs from stealing another window's VI/EN preference. Unsupported window-title configurations safely fall back to app memory.
+
+## Data minimization
+
+The extension sends hostname, tab/window identifiers, window title and temporary session ID. No page content, full URL path/query, passwords or keystrokes are stored. No remote service is used.
+
+## Test status
+
+Rust cross-target compile and unit tests run on Ubuntu, but real Windows keyboard-hook and browser Native Messaging E2E still require validation before stable release.

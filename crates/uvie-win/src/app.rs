@@ -57,6 +57,7 @@ struct Shared {
     memory: LanguageMemory,
     browser_memory: BrowserMemory,
     current_browser: Option<BrowserContext>,
+    browser_memory_mtime: Option<SystemTime>,
     foreground_exe: String,
     paths: Paths,
     /// Last-seen mtimes — the settings window writes the same files from
@@ -86,7 +87,10 @@ impl Shared {
     /// clobber UI edits made after startup.
     fn save(&self) {
         let _ = self.memory.save(&self.paths.memory);
-        let _ = self.browser_memory.save(&self.paths.browser_memory);
+        if self.browser_memory.save(&self.paths.browser_memory).is_ok() {
+            // The native host can also update this file; never reload our own write.
+            // mtime is refreshed on the next timer tick.
+        }
     }
 
     /// Re-read settings/macros when their files changed on disk (the
@@ -98,10 +102,15 @@ impl Shared {
             .duration_since(std::time::UNIX_EPOCH)
             .unwrap_or_default()
             .as_millis() as u64;
+        let hwnd =
+            unsafe { windows::Win32::UI::WindowsAndMessaging::GetForegroundWindow().0 as isize };
         let next = BrowserContext::load(&self.paths.browser_context)
-            .filter(|c| c.belongs_to(&self.foreground_exe, now));
-        let old_key = self.current_browser.as_ref().map(BrowserContext::tab_key);
-        let new_key = next.as_ref().map(BrowserContext::tab_key);
+            .filter(|c| c.belongs_to(&self.foreground_exe, hwnd, now));
+        let old_key = self
+            .current_browser
+            .as_ref()
+            .map(|c| (c.tab_key(), c.domain.clone()));
+        let new_key = next.as_ref().map(|c| (c.tab_key(), c.domain.clone()));
         if old_key != new_key {
             self.current_browser = next;
             self.dispatcher.on_app_switch(&self.foreground_exe);
@@ -134,6 +143,12 @@ impl Shared {
 
     fn reload_changed(&mut self) {
         self.sync_browser_context();
+        if let Some(new) =
+            reload_json::<BrowserMemory>(&self.paths.browser_memory, &mut self.browser_memory_mtime)
+        {
+            self.browser_memory = new;
+            self.recall_language();
+        }
         if let Some(new) = reload_json::<Settings>(&self.paths.settings, &mut self.settings_mtime) {
             let hotkey_changed = new.hotkey != self.settings.hotkey;
             let login_changed = new.launch_at_login != self.settings.launch_at_login;
@@ -200,6 +215,7 @@ impl App {
             memory,
             browser_memory,
             current_browser: None,
+            browser_memory_mtime: file_mtime(&paths.browser_memory),
             foreground_exe: String::new(),
             settings_mtime: file_mtime(&paths.settings),
             macros_mtime: file_mtime(&paths.macros),
@@ -243,6 +259,7 @@ impl App {
             let mut s = shared_menu.borrow_mut();
             match cmd {
                 tray::CMD_TOGGLE_LANGUAGE => {
+                    s.sync_browser_context();
                     let lang = match s.dispatcher.language {
                         InputLanguage::Vietnamese => InputLanguage::English,
                         InputLanguage::English => InputLanguage::Vietnamese,
