@@ -168,6 +168,17 @@ fn handle(msg: Message) -> Response {
                     .ok()
                     .and_then(|x| serde_json::from_slice(&x).ok())
                     .unwrap_or_else(|| serde_json::json!({"tabs":{},"domains":{}}));
+                // Setting a domain rule must immediately affect the current tab.
+                // Remove its previous manual override; other tabs keep their choices.
+                if msg.command == "set_domain" {
+                    let key = format!(
+                        "{}:{}:{}:{}",
+                        actual_browser, msg.session, msg.window_id, msg.tab_id
+                    );
+                    if let Some(tabs) = memory.get_mut("tabs").and_then(|x| x.as_object_mut()) {
+                        tabs.remove(&key);
+                    }
+                }
                 let domains = memory
                     .as_object_mut()
                     .and_then(|m| m.get_mut("domains"))
