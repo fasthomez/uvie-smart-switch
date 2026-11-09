@@ -46,6 +46,11 @@ Name: "english"; MessagesFile: "compiler:Default.isl"
 [Tasks]
 Name: "desktopicon"; Description: "Create a &desktop shortcut"; GroupDescription: "Additional icons:"; Flags: unchecked
 
+[Registry]
+; Remove the app's own launch-at-login value if the user enabled it —
+; otherwise uninstall leaves a dead HKCU Run entry pointing at a deleted exe.
+Root: HKCU; Subkey: "Software\Microsoft\Windows\CurrentVersion\Run"; ValueName: "UVie"; Flags: uninsdeletevalue
+
 [Files]
 Source: "..\target\release\uvie-win.exe"; DestDir: "{app}"; Flags: ignoreversion
 

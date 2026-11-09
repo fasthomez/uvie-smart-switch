@@ -1,10 +1,8 @@
 // Settings window root: sidebar + nav + six panes. Pane bodies live in
-// `pages/*.slint`; shared controls in `widgets.slint`. Vietnamese UI, same
-// layout as crates/uvie-winui/src/settings_window.rs.
+// `pages/*.slint`; shared controls in `widgets.slint`. Vietnamese UI.
 //
-// This file is compiled twice — once per widget style (see `app_fluent.slint`
-// / `app_material.slint` and build.rs) — so the user can pick Fluent or
-// Material at runtime (applied when the window reopens).
+// Compiled once with the Fluent style (build.rs `with_style("fluent")`);
+// light/dark mode switches live via `Palette.color-scheme`.
 
 import { UIGlyph, UITheme, NavItem, MacroItem } from "widgets.slint";
 import { GeneralPane } from "pages/general.slint";

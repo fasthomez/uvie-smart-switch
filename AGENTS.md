@@ -41,6 +41,19 @@ cargo fmt --all --check
 - `EnableWindow` lives in `Win32::UI::Input::KeyboardAndMouse`, not
   `WindowsAndMessaging`; `GetStockObject` returns `HGDIOBJ` directly (not
   `Result`).
+- **`ToUnicodeEx`'s `wScanCode` wants the lParam flag layout** —
+  `KF_EXTENDED = 0x0100`, `KF_UP = 0x8000`. The raw scancode-prefix
+  encoding (`scan | 0xE000`, used by `MAPVK_VSC_TO_VK_EX`) reads as
+  key-up+repeat+alt here and makes extended keys translate to 0.
+- **Injected keys inherit the *physical* modifier state.** A bare
+  `VK_DELETE` sent while the user holds Shift reads as Shift+Delete (a
+  cut), and a synthetic Shift release reports the held key as up (the
+  rest of an ALL-CAPS word goes lowercase). `inject.rs` tracks the
+  emitted Shift state through `set_shift`, releases it only for bare
+  Deletes, and restores the physical state at plan end.
+- `GetKeyboardState` on the hook thread can lag real modifiers —
+  `vk_to_char` overlays the live Shift/Ctrl/Alt/CapsLock bits from
+  `GetAsyncKeyState` (`sync_modifiers`) before translating.
 - The keyboard hook must skip keys when the foreground window belongs to
   this process (`GetForegroundWindow` + pid compare), or the engine rewrites
   what the user types into UVie's own settings UI/dialogs.
@@ -57,6 +70,11 @@ cargo fmt --all --check
   limitation).
 - Injected events are marked `LLKHF_INJECTED` and `dwExtraInfo =
   0x55564945` ("uVIE") so the hook swallows its own echoes.
+- `pointer.rs` is the `WH_MOUSE_LL` counterpart of the event tap's mouse
+  half: every button-down calls `Dispatcher::on_pointer_down` because a
+  click can move the caret past what the single-line anchor model tracks.
+- Only one copy may run per session — `main.rs` holds the named mutex
+  `Local\UVieWin.SingleInstance`; a second instance exits immediately.
 - All Win32-facing code is in `uvie-win`; keep `uvie-core` platform-free so
   it stays unit-testable (see `crates/uvie-core/src/tests.rs`, which replays
   real Telex sequences validated against uvie-rs's own test vectors).

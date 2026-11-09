@@ -210,10 +210,19 @@ fn run(
         let weak = win.as_weak();
         std::thread::spawn(move || {
             while rx.recv().is_ok() {
-                let _ = weak.upgrade_in_event_loop(|win| {
-                    let _ = win.show();
-                    win.window().request_redraw();
-                });
+                // upgrade_in_event_loop fails once the Slint loop is
+                // gone — drop `rx` then so `open_settings` sees a dead
+                // channel and respawns the UI thread instead of sending
+                // into the void.
+                if weak
+                    .upgrade_in_event_loop(|win| {
+                        let _ = win.show();
+                        win.window().request_redraw();
+                    })
+                    .is_err()
+                {
+                    return;
+                }
             }
         });
     }

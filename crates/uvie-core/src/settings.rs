@@ -25,7 +25,12 @@ pub enum UiMode {
 /// Global keyboard shortcut binding (e.g. the Vi/En toggle).
 /// Serialized as `{ "ctrl": true, "shift": true, "alt": false, "vk": 90 }`
 /// — `vk` is a Win32 virtual-key code.
+///
+/// `serde(default)` is load-bearing: a hand-edited `"hotkey"` object
+/// missing a field would otherwise fail the *whole* `Settings` parse and
+/// silently reset every setting back to defaults.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(default)]
 pub struct Hotkey {
     pub ctrl: bool,
     pub alt: bool,
@@ -139,7 +144,11 @@ impl Settings {
             std::fs::create_dir_all(dir)?;
         }
         let text = serde_json::to_string_pretty(self).map_err(std::io::Error::other)?;
-        std::fs::write(path, text)
+        // tmp + rename: the app's 1s mtime poller must never observe a
+        // truncated mid-write file (and a crash leaves the old file).
+        let tmp = path.with_extension("json.tmp");
+        std::fs::write(&tmp, text)?;
+        std::fs::rename(&tmp, path)
     }
 
     pub fn is_excluded(&self, exe_name: &str) -> bool {

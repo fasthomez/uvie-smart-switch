@@ -102,8 +102,9 @@ press `Ctrl+Shift+Z` anywhere to toggle Vi/En.
 
 - Keystrokes for **elevated** apps are invisible to the low-level hook and
   pass through uncomposed (same gap as uvie-mac's secure-input mode).
-- Non-Latin keyboard layouts are not auto-detected yet - keys still feed
-  the engine (`non_latin_layout` is a TODO in `app.rs`).
+- Non-Latin *input languages* pass through untouched (the foreground
+  layout's LANGID is checked against `LOCALE_SSCRIPTS`), but a Latin
+  layout registered under a non-Latin language can still misclassify.
 
 ## Development
 

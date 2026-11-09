@@ -15,11 +15,14 @@
 use std::cell::RefCell;
 
 use uvie_core::keys::{KeyEvent, KeyKind};
+use windows::core::PCWSTR;
 use windows::Win32::Foundation::{LPARAM, LRESULT, WPARAM};
+use windows::Win32::Globalization::{GetLocaleInfoEx, LCIDToLocaleName, LOCALE_SSCRIPTS};
 use windows::Win32::UI::Input::KeyboardAndMouse::{
-    GetAsyncKeyState, GetKeyboardLayout, GetKeyboardState, ToUnicodeEx, VIRTUAL_KEY, VK_BACK,
-    VK_CONTROL, VK_DELETE, VK_DOWN, VK_END, VK_ESCAPE, VK_HOME, VK_INSERT, VK_LEFT, VK_LWIN,
-    VK_MENU, VK_NEXT, VK_PACKET, VK_PRIOR, VK_RETURN, VK_RIGHT, VK_RWIN, VK_SHIFT, VK_TAB, VK_UP,
+    GetAsyncKeyState, GetKeyboardLayout, GetKeyboardState, ToUnicodeEx, VIRTUAL_KEY, VK_APPS,
+    VK_BACK, VK_CAPITAL, VK_CONTROL, VK_DELETE, VK_DOWN, VK_END, VK_ESCAPE, VK_HOME, VK_INSERT,
+    VK_LCONTROL, VK_LEFT, VK_LMENU, VK_LSHIFT, VK_LWIN, VK_MENU, VK_NEXT, VK_PACKET, VK_PRIOR,
+    VK_RCONTROL, VK_RETURN, VK_RIGHT, VK_RMENU, VK_RSHIFT, VK_RWIN, VK_SHIFT, VK_TAB, VK_UP,
 };
 use windows::Win32::UI::WindowsAndMessaging::{
     CallNextHookEx, GetForegroundWindow, GetWindowThreadProcessId, SetWindowsHookExW,
@@ -131,7 +134,7 @@ fn translate(k: &KBDLLHOOKSTRUCT) -> KeyEvent {
             VK_ESCAPE => KeyKind::Escape,
             VK_LEFT => KeyKind::Left,
             VK_RIGHT => KeyKind::Right,
-            VK_UP | VK_DOWN | VK_HOME | VK_END | VK_PRIOR | VK_NEXT | VK_INSERT => {
+            VK_UP | VK_DOWN | VK_HOME | VK_END | VK_PRIOR | VK_NEXT | VK_INSERT | VK_APPS => {
                 KeyKind::Navigation
             }
             VK_DELETE => KeyKind::ForwardDelete,
@@ -144,7 +147,8 @@ fn translate(k: &KBDLLHOOKSTRUCT) -> KeyEvent {
                 None => KeyKind::Other,
             },
             _ => match vk_to_char(vk, k.scanCode, k.flags.contains(LLKHF_EXTENDED)) {
-                Some(c) => KeyKind::Char(c),
+                Some(VkTranslation::Char(c)) => KeyKind::Char(c),
+                Some(VkTranslation::Sequence) => KeyKind::Break,
                 None => KeyKind::Other,
             },
         }
@@ -160,6 +164,64 @@ fn translate(k: &KBDLLHOOKSTRUCT) -> KeyEvent {
     }
 }
 
+thread_local! {
+    /// Per-HKL script cache — the locale-name + scripts lookup would
+    /// otherwise run on every keystroke inside the LL hook.
+    static LAYOUT_NON_LATIN: RefCell<Option<(usize, bool)>> = const { RefCell::new(None) };
+}
+
+/// True when the foreground thread's input language uses a non-Latin
+/// script (Cyrillic, Arabic, CJK IMEs, ...) — the dispatcher then passes
+/// every key through untouched (`Context::non_latin_layout`).
+///
+/// Resolution: the low word of the foreground thread's `HKL` is a LANGID,
+/// mapped to a locale name whose `LOCALE_SSCRIPTS` lists its scripts
+/// (e.g. "Latn;", "Cyrl;Latn;"). A layout whose script list lacks "Latn"
+/// is non-Latin; ambiguous mixed-script languages keep "Latn" and stay
+/// enabled. Every failure defaults to Latin: erring toward processing is
+/// better than silently disabling the IME on exotic-but-Latin layouts.
+/// Note this keys off the input *language* — a Latin layout registered
+/// under a non-Latin LANGID can misclassify, but the common direction
+/// (CJK/Cyrillic input) is handled.
+pub fn active_layout_is_non_latin() -> bool {
+    unsafe {
+        let fg = GetForegroundWindow();
+        let tid = GetWindowThreadProcessId(fg, None);
+        let hkl = GetKeyboardLayout(tid);
+        if let Some(hit) = LAYOUT_NON_LATIN.with(|c| match *c.borrow() {
+            Some((h, non_latin)) if h == hkl.0 as usize => Some(non_latin),
+            _ => None,
+        }) {
+            return hit;
+        }
+        let non_latin = langid_is_non_latin((hkl.0 as usize & 0xFFFF) as u32);
+        LAYOUT_NON_LATIN.with(|c| *c.borrow_mut() = Some((hkl.0 as usize, non_latin)));
+        non_latin
+    }
+}
+
+fn langid_is_non_latin(langid: u32) -> bool {
+    unsafe {
+        let mut name = [0u16; 85]; // LOCALE_NAME_MAX_LENGTH
+                                   // MAKELCID(langid, SORT_DEFAULT) == langid (sort 0).
+        if LCIDToLocaleName(langid, Some(&mut name), 0) == 0 {
+            return false;
+        }
+        let mut scripts = [0u16; 160];
+        let n = GetLocaleInfoEx(PCWSTR(name.as_ptr()), LOCALE_SSCRIPTS, Some(&mut scripts));
+        if n <= 0 || n as usize > scripts.len() {
+            return false;
+        }
+        let len = scripts[..n as usize]
+            .iter()
+            .position(|&c| c == 0)
+            .unwrap_or(n as usize);
+        !String::from_utf16_lossy(&scripts[..len])
+            .split(';')
+            .any(|s| s == "Latn")
+    }
+}
+
 /// `ToUnicodeEx` wFlags bit 2: do not change the kernel-mode keyboard
 /// buffer state (Windows 10 1607+). Without it, every translation we run in
 /// the hook mutates the shared dead-key/ligature buffer — e.g. translating a
@@ -167,19 +229,37 @@ fn translate(k: &KBDLLHOOKSTRUCT) -> KeyEvent {
 /// a plain `e` instead of `ê`.
 const TU_DONT_CHANGE_STATE: u32 = 4;
 
+/// What a VK produces under the foreground layout.
+enum VkTranslation {
+    /// Exactly one character — feedable to the engine.
+    Char(char),
+    /// Multi-unit output (ligature or combining sequence): passed through
+    /// natively, but it still terminates the composing word.
+    Sequence,
+}
+
 /// Resolve a VK to the character it produces under the foreground window's
 /// keyboard layout (input layouts are per-focus).
-fn vk_to_char(vk: VIRTUAL_KEY, scan: u32, extended: bool) -> Option<char> {
+fn vk_to_char(vk: VIRTUAL_KEY, scan: u32, extended: bool) -> Option<VkTranslation> {
     unsafe {
         let mut state = [0u8; 256];
         if GetKeyboardState(&mut state).is_err() {
             return None;
         }
+        // GetKeyboardState reflects this thread's own message-queue state,
+        // which can lag the real modifiers by an event (keystrokes queue
+        // on the foreground thread, not ours). Overlay the live modifier
+        // bits so Shift/CapsLock-dependent translations can't mis-map.
+        sync_modifiers(&mut state);
         let fg = GetForegroundWindow();
         let tid = GetWindowThreadProcessId(fg, None);
         let hkl = GetKeyboardLayout(tid);
         let mut buf = [0u16; 8];
-        let scan = if extended { scan | 0xE000 } else { scan };
+        // wScanCode uses the lParam flag layout: bit 8 (KF_EXTENDED)
+        // marks extended keys, bit 15 (KF_UP) a release. `0xE000` is the
+        // raw scancode-prefix encoding from MAPVK_VSC_TO_VK_EX — passing
+        // it here would read as key-up + repeat + alt and translate to 0.
+        let scan = if extended { scan | 0x0100 } else { scan };
         let n = ToUnicodeEx(
             vk.0 as u32,
             scan,
@@ -190,11 +270,44 @@ fn vk_to_char(vk: VIRTUAL_KEY, scan: u32, extended: bool) -> Option<char> {
         );
         match n.cmp(&0) {
             std::cmp::Ordering::Greater => {
-                String::from_utf16(&buf[..n as usize]).ok()?.chars().next()
+                let s = String::from_utf16(&buf[..n as usize]).ok()?;
+                match s.chars().count() {
+                    1 => Some(VkTranslation::Char(s.chars().next()?)),
+                    // Feeding just the first unit of a ligature/combining
+                    // sequence would desync engine and screen.
+                    _ => Some(VkTranslation::Sequence),
+                }
             }
             // Dead key (n < 0): the layout buffers a diacritic — treat as no
             // char; the composed result arrives with the following key.
             _ => None,
         }
+    }
+}
+
+/// Force the modifier bits of a `GetKeyboardState` array to match the
+/// real-time async state (down bit 0x80, toggle bit 0x01 for CapsLock).
+fn sync_modifiers(state: &mut [u8; 256]) {
+    for vk in [
+        VK_SHIFT,
+        VK_LSHIFT,
+        VK_RSHIFT,
+        VK_CONTROL,
+        VK_LCONTROL,
+        VK_RCONTROL,
+        VK_MENU,
+        VK_LMENU,
+        VK_RMENU,
+    ] {
+        if key_down(vk) {
+            state[vk.0 as usize] |= 0x80;
+        } else {
+            state[vk.0 as usize] &= !0x80;
+        }
+    }
+    if unsafe { GetAsyncKeyState(VK_CAPITAL.0 as i32) } & 1 != 0 {
+        state[VK_CAPITAL.0 as usize] |= 0x01;
+    } else {
+        state[VK_CAPITAL.0 as usize] &= !0x01;
     }
 }

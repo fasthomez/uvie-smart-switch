@@ -16,9 +16,10 @@ use uvie_core::memory::LanguageMemory;
 use uvie_core::settings::{LanguagePref, Settings};
 use windows::Win32::Foundation::HWND;
 
-use crate::foreground::FocusWatcher;
+use crate::foreground::{self, FocusWatcher};
 use crate::inject;
-use crate::keyboard::KeyboardHook;
+use crate::keyboard::{self, KeyboardHook};
+use crate::pointer::PointerHook;
 use crate::startup;
 use crate::tray::{self, TrayIcon};
 
@@ -87,6 +88,7 @@ impl Shared {
     fn reload_changed(&mut self) {
         if let Some(new) = reload_json::<Settings>(&self.paths.settings, &mut self.settings_mtime) {
             let hotkey_changed = new.hotkey != self.settings.hotkey;
+            let login_changed = new.launch_at_login != self.settings.launch_at_login;
             self.settings = new;
             self.apply_engine_options();
             self.dispatcher.macro_enabled = self.settings.macro_enabled;
@@ -94,7 +96,9 @@ impl Shared {
             if hotkey_changed && !self.tray_hwnd.is_invalid() {
                 tray::update_hotkey(self.tray_hwnd, &self.settings.hotkey);
             }
-            let _ = startup::set_launch_at_login(self.settings.launch_at_login);
+            if login_changed {
+                let _ = startup::set_launch_at_login(self.settings.launch_at_login);
+            }
         }
         if let Some(macros) = reload_json::<MacroTable>(&self.paths.macros, &mut self.macros_mtime)
         {
@@ -108,24 +112,27 @@ fn file_mtime(path: &Path) -> Option<SystemTime> {
 }
 
 /// Load a JSON file only when its mtime differs from `last`; `last` is
-/// advanced on every successful *read* so a corrupt file isn't re-parsed
-/// every tick (a partial write gets a fresh mtime when it completes).
+/// advanced only on a successful *parse*, so a torn read (the settings
+/// window mid-write) retries on the next tick instead of latching the
+/// mtime and going stale until the following save.
 fn reload_json<T: DeserializeOwned>(path: &Path, last: &mut Option<SystemTime>) -> Option<T> {
     let mtime = file_mtime(path)?;
     if *last == Some(mtime) {
         return None;
     }
     let text = std::fs::read_to_string(path).ok()?;
+    let value = serde_json::from_str(&text).ok()?;
     *last = Some(mtime);
-    serde_json::from_str(&text).ok()
+    Some(value)
 }
 
 /// Owns the OS plumbing. Lives on the message-loop thread.
 pub struct App {
     shared: Rc<RefCell<Shared>>,
     _hook: KeyboardHook,
+    _pointer: Option<PointerHook>,
     _tray: TrayIcon,
-    _focus: FocusWatcher,
+    _focus: Option<FocusWatcher>,
 }
 
 impl App {
@@ -137,6 +144,7 @@ impl App {
         let mut dispatcher = Dispatcher::new(EngineSession::new());
         dispatcher.macros = MacroTable::load(&paths.macros);
         dispatcher.macro_enabled = settings.macro_enabled;
+        dispatcher.auto_capitalize = settings.auto_capitalize;
         let shared = Rc::new(RefCell::new(Shared {
             dispatcher,
             settings,
@@ -162,7 +170,7 @@ impl App {
                 app_excluded: self_focused
                     || s.settings.is_excluded(&s.foreground_exe)
                     || !s.settings.enabled,
-                non_latin_layout: false, // TODO: GetKeyboardLayout language id check
+                non_latin_layout: keyboard::active_layout_is_non_latin(),
             };
             let chromium = s.settings.is_chromium(&s.foreground_exe);
             match s.dispatcher.handle(key, &ctx) {
@@ -221,37 +229,39 @@ impl App {
             .unwrap_or_else(|| "uvie-win.exe".to_string());
 
         let shared_focus = Rc::clone(&shared);
+        let own_exe_watcher = own_exe.clone();
+        // Non-fatal: a failed WinEvent hook only loses exclusion lists,
+        // per-app language and the Chromium workaround — the IME itself
+        // still works.
         let focus = FocusWatcher::install(move |exe| {
-            if exe.eq_ignore_ascii_case(&own_exe) {
-                return;
-            }
-            let mut s = shared_focus.borrow_mut();
-            // EVENT_SYSTEM_FOREGROUND fires for window-to-window switches
-            // inside one process too; a same-app hop must not drop the
-            // composition or churn the per-app sentence memory.
-            if exe.eq_ignore_ascii_case(&s.foreground_exe) {
-                return;
-            }
-            s.foreground_exe = exe;
-            if s.settings.per_app_language {
-                let exe = s.foreground_exe.clone();
-                if let Some(pref) = s.memory.recall(&exe) {
-                    let lang = match pref {
-                        LanguagePref::Vietnamese => InputLanguage::Vietnamese,
-                        LanguagePref::English => InputLanguage::English,
-                    };
-                    s.dispatcher.set_language(lang);
-                }
-            }
-            // Focus change drops the in-flight composition and swaps the
-            // per-app sentence-start state, like uvie-mac.
-            let app = s.foreground_exe.clone();
-            s.dispatcher.on_app_switch(&app);
-        })?;
+            apply_foreground(&mut shared_focus.borrow_mut(), exe, &own_exe_watcher);
+        })
+        .ok();
+
+        // Seed the foreground app: the WinEvent hook only fires on focus
+        // *changes*, so without this the app frontmost at launch stays
+        // unclassified (no exclusion, no per-app language recall, no
+        // Chromium workaround) until the first window switch.
+        {
+            let exe = foreground::foreground_exe();
+            apply_foreground(&mut shared.borrow_mut(), exe, &own_exe);
+        }
+
+        // -- pointer hook ---------------------------------------------------
+        // A click can move the caret where the single-line anchor model
+        // cannot track — drop the composition like uvie-mac's event tap.
+        // Non-fatal: losing it only means a click won't reset a stale
+        // caret anchor.
+        let shared_pointer = Rc::clone(&shared);
+        let pointer = PointerHook::install(move || {
+            shared_pointer.borrow_mut().dispatcher.on_pointer_down();
+        })
+        .ok();
 
         Ok(Self {
             shared,
             _hook: hook,
+            _pointer: pointer,
             _tray: tray,
             _focus: focus,
         })
@@ -261,6 +271,33 @@ impl App {
     pub fn sync_launch_at_login(&self) {
         let s = self.shared.borrow();
         let _ = startup::set_launch_at_login(s.settings.launch_at_login);
+    }
+}
+
+/// Apply a foreground-app change: remember the new exe, recall its Vi/En
+/// preference, and drop the in-flight composition. Shared by the WinEvent
+/// focus watcher and the startup seed. `own_exe` keeps our own windows
+/// (settings, tray) from being attributed as the active app, and a
+/// same-app hop must not churn the composition or sentence memory.
+fn apply_foreground(s: &mut Shared, exe: String, own_exe: &str) {
+    if exe.eq_ignore_ascii_case(own_exe) || exe.eq_ignore_ascii_case(&s.foreground_exe) {
+        return;
+    }
+    s.foreground_exe = exe;
+    // Focus change drops the in-flight composition and swaps the per-app
+    // sentence-start state; the dispatcher contract calls for this
+    // BEFORE restoring the per-app language.
+    let app = s.foreground_exe.clone();
+    s.dispatcher.on_app_switch(&app);
+    if s.settings.per_app_language {
+        let exe = s.foreground_exe.clone();
+        if let Some(pref) = s.memory.recall(&exe) {
+            let lang = match pref {
+                LanguagePref::Vietnamese => InputLanguage::Vietnamese,
+                LanguagePref::English => InputLanguage::English,
+            };
+            s.dispatcher.set_language(lang);
+        }
     }
 }
 

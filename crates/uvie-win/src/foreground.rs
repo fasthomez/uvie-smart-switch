@@ -7,12 +7,14 @@
 
 use std::cell::RefCell;
 
+use windows::core::PWSTR;
 use windows::Win32::Foundation::{CloseHandle, HWND, MAX_PATH};
-use windows::Win32::System::ProcessStatus::GetModuleFileNameExW;
-use windows::Win32::System::Threading::{OpenProcess, PROCESS_QUERY_LIMITED_INFORMATION};
+use windows::Win32::System::Threading::{
+    OpenProcess, QueryFullProcessImageNameW, PROCESS_NAME_FORMAT, PROCESS_QUERY_LIMITED_INFORMATION,
+};
 use windows::Win32::UI::Accessibility::{SetWinEventHook, UnhookWinEvent, HWINEVENTHOOK};
 use windows::Win32::UI::WindowsAndMessaging::{
-    GetWindowThreadProcessId, EVENT_SYSTEM_FOREGROUND, WINEVENT_OUTOFCONTEXT,
+    GetForegroundWindow, GetWindowThreadProcessId, EVENT_SYSTEM_FOREGROUND, WINEVENT_OUTOFCONTEXT,
 };
 
 type FocusHandler = RefCell<Option<Box<dyn FnMut(String)>>>;
@@ -79,6 +81,14 @@ unsafe extern "system" fn win_event_proc(
     });
 }
 
+/// Lowercase exe name of the process owning the current foreground
+/// window, or "" when unresolvable. `EVENT_SYSTEM_FOREGROUND` only fires
+/// on focus *changes*, so the app that was frontmost when UVie launched
+/// would never be classified without this startup seed.
+pub fn foreground_exe() -> String {
+    unsafe { process_exe_name(GetForegroundWindow()).unwrap_or_default() }
+}
+
 /// exe file name (lowercase, e.g. `notepad.exe`) of the process that owns
 /// `hwnd`, or None when it can't be resolved (elevated/system apps).
 pub fn process_exe_name(hwnd: HWND) -> Option<String> {
@@ -90,12 +100,24 @@ pub fn process_exe_name(hwnd: HWND) -> Option<String> {
         }
         let proc = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, false, pid).ok()?;
         let mut buf = [0u16; MAX_PATH as usize];
-        let n = GetModuleFileNameExW(Some(proc), None, &mut buf);
+        let mut len = buf.len() as u32;
+        // QueryFullProcessImageNameW resolves the image path through the
+        // kernel — needs only PROCESS_QUERY_LIMITED_INFORMATION and works
+        // cross-bitness (GetModuleFileNameExW fails on 32-bit targets
+        // from this 64-bit process, which would leave such apps
+        // unclassified: no exclusion, per-app language or Chromium
+        // workaround).
+        let ok = QueryFullProcessImageNameW(
+            proc,
+            PROCESS_NAME_FORMAT(0),
+            PWSTR(buf.as_mut_ptr()),
+            &mut len,
+        );
         let _ = CloseHandle(proc);
-        if n == 0 {
+        if ok.is_err() || len == 0 {
             return None;
         }
-        let path = String::from_utf16_lossy(&buf[..n as usize]);
+        let path = String::from_utf16_lossy(&buf[..len as usize]);
         path.rsplit(['\\', '/'])
             .next()
             .map(|s| s.to_ascii_lowercase())

@@ -19,10 +19,10 @@ use windows::Win32::UI::Shell::{
 };
 use windows::Win32::UI::WindowsAndMessaging::{
     AppendMenuW, CreatePopupMenu, CreateWindowExW, DefWindowProcW, DestroyMenu, DestroyWindow,
-    GetCursorPos, KillTimer, LoadIconW, PostQuitMessage, RegisterClassExW, SetForegroundWindow,
-    SetTimer, TrackPopupMenu, CW_USEDEFAULT, HICON, IDI_APPLICATION, MF_SEPARATOR, MF_STRING,
-    TPM_BOTTOMALIGN, TPM_LEFTALIGN, WM_COMMAND, WM_DESTROY, WM_HOTKEY, WM_LBUTTONDBLCLK,
-    WM_RBUTTONUP, WM_TIMER, WM_USER, WNDCLASSEXW, WS_EX_NOACTIVATE,
+    GetCursorPos, KillTimer, LoadIconW, PostMessageW, PostQuitMessage, RegisterClassExW,
+    SetForegroundWindow, SetTimer, TrackPopupMenu, CW_USEDEFAULT, HICON, IDI_APPLICATION,
+    MF_SEPARATOR, MF_STRING, TPM_BOTTOMALIGN, TPM_LEFTALIGN, WM_COMMAND, WM_DESTROY, WM_HOTKEY,
+    WM_LBUTTONDBLCLK, WM_NULL, WM_RBUTTONUP, WM_TIMER, WM_USER, WNDCLASSEXW, WS_EX_NOACTIVATE,
 };
 
 /// App icon resource id (app.rc: `IDI_APP_ICON ICON "assets/uvie.ico"`).
@@ -288,5 +288,8 @@ unsafe fn show_menu(hwnd: HWND) {
         hwnd,
         None,
     );
+    // Documented companion to the SetForegroundWindow above: nudges input
+    // ownership back after the modal menu loop ends.
+    let _ = PostMessageW(Some(hwnd), WM_NULL, WPARAM(0), LPARAM(0));
     let _ = DestroyMenu(menu);
 }
