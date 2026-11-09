@@ -8,6 +8,19 @@ on:
 permissions:
   contents: write
 
+# SignPath OSS code signing. One-time setup on the SignPath side:
+#   1. Apply at https://signpath.io/open-source (free for public OSS repos).
+#   2. In the SignPath project, create a signing policy "release-signing"
+#      with the issued certificate, and an artifact configuration (slug
+#      "default") that Authenticode-signs every *.exe in the artifact zip.
+#   3. Repo settings → Secrets and variables → Actions:
+#      secrets.SIGNPATH_API_TOKEN          (API token of the CI user)
+#      secrets.SIGNPATH_ORGANIZATION_ID    (your SignPath org GUID)
+#      vars.SIGNPATH_ENABLED=true          (gate: releases stay unsigned
+#                                           until this is set)
+# Without SIGNPATH_ENABLED the pipeline behaves exactly as before: the
+# exe and installer ship unsigned.
+
 jobs:
   release:
     name: Build and release UVie for Windows
@@ -34,11 +47,30 @@ jobs:
       - name: Cargo build (release)
         run: cargo build --release
 
+      - name: Sign uvie-win.exe (SignPath)
+        if: vars.SIGNPATH_ENABLED == 'true'
+        uses: signpath/github-action-submit-signing-request@v1
+        with:
+          api-token: ${{ secrets.SIGNPATH_API_TOKEN }}
+          organization-id: ${{ secrets.SIGNPATH_ORGANIZATION_ID }}
+          project-slug: uvie-win
+          signing-policy-slug: release-signing
+          artifact-configuration-slug: default
+          input-artifact: target/release/uvie-win.exe
+          output-artifact-directory: signed
+          wait-for-completion: true
+
+      - name: Use signed exe
+        if: vars.SIGNPATH_ENABLED == 'true'
+        shell: pwsh
+        run: Copy-Item -Recurse -Force signed/* target/release/
+
       - name: Install Inno Setup
         shell: pwsh
         run: winget install --id JRSoftware.InnoSetup -e --accept-package-agreements --accept-source-agreements --silent
 
       - name: Build installer
+        id: installer
         shell: pwsh
         run: |
           $ver = (Select-String -Path crates/uvie-win/Cargo.toml -Pattern '^version = "([^"]+)"').Matches.Groups[1].Value
@@ -47,6 +79,25 @@ jobs:
             "$env:LOCALAPPDATA\Programs\Inno Setup 6\iscc.exe"
           ) | Where-Object { Test-Path $_ } | Select-Object -First 1
           & $iscc "/DAppVersion=$ver" installer/uvie-win.iss
+          "setup_exe=dist/uvie-win-$ver-x64-setup.exe" >> $env:GITHUB_OUTPUT
+
+      - name: Sign installer (SignPath)
+        if: vars.SIGNPATH_ENABLED == 'true'
+        uses: signpath/github-action-submit-signing-request@v1
+        with:
+          api-token: ${{ secrets.SIGNPATH_API_TOKEN }}
+          organization-id: ${{ secrets.SIGNPATH_ORGANIZATION_ID }}
+          project-slug: uvie-win
+          signing-policy-slug: release-signing
+          artifact-configuration-slug: default
+          input-artifact: ${{ steps.installer.outputs.setup_exe }}
+          output-artifact-directory: signed-setup
+          wait-for-completion: true
+
+      - name: Use signed installer
+        if: vars.SIGNPATH_ENABLED == 'true'
+        shell: pwsh
+        run: Copy-Item -Recurse -Force signed-setup/* dist/
 
       - name: Package uvie-win.exe
         shell: pwsh
