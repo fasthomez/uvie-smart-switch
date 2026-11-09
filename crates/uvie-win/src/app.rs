@@ -16,6 +16,7 @@ use uvie_core::memory::LanguageMemory;
 use uvie_core::settings::{LanguagePref, Settings};
 use windows::Win32::Foundation::HWND;
 
+use crate::browser_context::{BrowserContext, BrowserMemory};
 use crate::foreground::{self, FocusWatcher};
 use crate::inject;
 use crate::keyboard::{self, KeyboardHook};
@@ -30,6 +31,8 @@ pub struct Paths {
     /// Macro-definition file (`macros.json`): written by the settings
     /// window, loaded once here at startup.
     pub macros: PathBuf,
+    pub browser_context: PathBuf,
+    pub browser_memory: PathBuf,
 }
 
 impl Paths {
@@ -42,6 +45,8 @@ impl Paths {
             settings: dir.join("settings.json"),
             memory: dir.join("memory.json"),
             macros: dir.join("macros.json"),
+            browser_context: dir.join("browser-context.json"),
+            browser_memory: dir.join("browser-memory.json"),
         }
     }
 }
@@ -50,6 +55,8 @@ struct Shared {
     dispatcher: Dispatcher,
     settings: Settings,
     memory: LanguageMemory,
+    browser_memory: BrowserMemory,
+    current_browser: Option<BrowserContext>,
     foreground_exe: String,
     paths: Paths,
     /// Last-seen mtimes — the settings window writes the same files from
@@ -79,13 +86,54 @@ impl Shared {
     /// clobber UI edits made after startup.
     fn save(&self) {
         let _ = self.memory.save(&self.paths.memory);
+        let _ = self.browser_memory.save(&self.paths.browser_memory);
     }
 
     /// Re-read settings/macros when their files changed on disk (the
     /// settings window writes them from another thread in this process;
     /// hand-edits are picked up too). Parse failures keep the old values —
     /// the writer may be mid-write.
+    fn sync_browser_context(&mut self) {
+        let now = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_millis() as u64;
+        let next = BrowserContext::load(&self.paths.browser_context)
+            .filter(|c| c.belongs_to(&self.foreground_exe, now));
+        let old_key = self.current_browser.as_ref().map(BrowserContext::tab_key);
+        let new_key = next.as_ref().map(BrowserContext::tab_key);
+        if old_key != new_key {
+            self.current_browser = next;
+            self.dispatcher.on_app_switch(&self.foreground_exe);
+            self.recall_language();
+        } else {
+            self.current_browser = next;
+        }
+    }
+
+    fn recall_language(&mut self) {
+        if let Some(pref) = self
+            .current_browser
+            .as_ref()
+            .and_then(|c| self.browser_memory.recall(c))
+        {
+            self.dispatcher.set_language(if pref {
+                InputLanguage::Vietnamese
+            } else {
+                InputLanguage::English
+            });
+        } else if self.settings.per_app_language {
+            if let Some(pref) = self.memory.recall(&self.foreground_exe) {
+                self.dispatcher.set_language(match pref {
+                    LanguagePref::Vietnamese => InputLanguage::Vietnamese,
+                    LanguagePref::English => InputLanguage::English,
+                });
+            }
+        }
+    }
+
     fn reload_changed(&mut self) {
+        self.sync_browser_context();
         if let Some(new) = reload_json::<Settings>(&self.paths.settings, &mut self.settings_mtime) {
             let hotkey_changed = new.hotkey != self.settings.hotkey;
             let login_changed = new.launch_at_login != self.settings.launch_at_login;
@@ -140,6 +188,7 @@ impl App {
         let paths = Paths::appdata();
         let settings = Settings::load(&paths.settings);
         let memory = LanguageMemory::load(&paths.memory);
+        let browser_memory = BrowserMemory::load(&paths.browser_memory);
 
         let mut dispatcher = Dispatcher::new(EngineSession::new());
         dispatcher.macros = MacroTable::load(&paths.macros);
@@ -149,6 +198,8 @@ impl App {
             dispatcher,
             settings,
             memory,
+            browser_memory,
+            current_browser: None,
             foreground_exe: String::new(),
             settings_mtime: file_mtime(&paths.settings),
             macros_mtime: file_mtime(&paths.macros),
@@ -197,7 +248,13 @@ impl App {
                         InputLanguage::English => InputLanguage::Vietnamese,
                     };
                     s.dispatcher.set_language(lang);
-                    if s.settings.per_app_language && !s.foreground_exe.is_empty() {
+                    // Tab-specific manual toggles win over a domain rule.
+                    // Domain-wide policies can be configured in browser-memory.json.
+                    if let Some(ctx) = s.current_browser.clone() {
+                        s.browser_memory
+                            .tabs
+                            .insert(ctx.tab_key(), matches!(lang, InputLanguage::Vietnamese));
+                    } else if s.settings.per_app_language && !s.foreground_exe.is_empty() {
                         let pref = match lang {
                             InputLanguage::Vietnamese => LanguagePref::Vietnamese,
                             InputLanguage::English => LanguagePref::English,
@@ -289,16 +346,9 @@ fn apply_foreground(s: &mut Shared, exe: String, own_exe: &str) {
     // BEFORE restoring the per-app language.
     let app = s.foreground_exe.clone();
     s.dispatcher.on_app_switch(&app);
-    if s.settings.per_app_language {
-        let exe = s.foreground_exe.clone();
-        if let Some(pref) = s.memory.recall(&exe) {
-            let lang = match pref {
-                LanguagePref::Vietnamese => InputLanguage::Vietnamese,
-                LanguagePref::English => InputLanguage::English,
-            };
-            s.dispatcher.set_language(lang);
-        }
-    }
+    s.current_browser = None;
+    s.sync_browser_context();
+    s.recall_language();
 }
 
 /// True when the foreground window belongs to this process — used to keep

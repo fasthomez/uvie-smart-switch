@@ -9,6 +9,7 @@
 //! `SendInput` writes the Vietnamese text back.
 
 mod app;
+mod browser_context;
 mod foreground;
 mod inject;
 mod keyboard;

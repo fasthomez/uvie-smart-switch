@@ -4,18 +4,20 @@ members = [
     "crates/uvie-core",
     "crates/uvie-slintui",
     "crates/uvie-win",
+    "crates/uvie-native-host",
 ]
 default-members = [
     "crates/uvie-core",
     "crates/uvie-slintui",
     "crates/uvie-win",
+    "crates/uvie-native-host",
 ]
 
 [workspace.package]
 edition = "2021"
 rust-version = "1.92"
 license = "MIT OR Apache-2.0"
-repository = "https://github.com/uvie-project/uvie-win"
+repository = "https://github.com/fasthomez/uvie-smart-switch"
 
 [workspace.dependencies]
 uvie = { git = "https://github.com/uvie-project/uvie-rs", tag = "uvie-host-v0.2.1" }

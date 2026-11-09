@@ -1,0 +1,9 @@
+{
+  "name": "com.fasthomez.uvie_smart_switch",
+  "description": "UVie active tab context bridge",
+  "path": "C:\\replace\\with\\uvie-native-host.exe",
+  "type": "stdio",
+  "allowed_origins": [
+    "chrome-extension://EXTENSION_ID/"
+  ]
+}

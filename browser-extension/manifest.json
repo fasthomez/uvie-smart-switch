@@ -1,0 +1,18 @@
+{
+  "manifest_version": 3,
+  "name": "UVie Smart Switch Companion",
+  "version": "0.1.0",
+  "description": "Synchronize active browser tab context with UVie Windows.",
+  "permissions": [
+    "tabs",
+    "storage",
+    "alarms"
+  ],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "host_permissions": [
+    "http://*/*",
+    "https://*/*"
+  ]
+}
